@@ -5,6 +5,7 @@ import { GesturePad } from './GesturePad';
 import { PianoKeys } from './PianoKeys';
 import { VolumeSlider } from './VolumeSlider';
 import { CenterArea } from './CenterArea';
+import { MenuOverlay } from './MenuOverlay';
 import type { ScaleDegree, JoystickDirection } from '@/music/types';
 
 interface LayoutProps {
@@ -79,6 +80,8 @@ export function Layout(props: LayoutProps) {
         ))}
         <span style={{ marginLeft: 'auto' }}>⏺ ⏹ ▶</span>
       </div>
+
+      <MenuOverlay />
     </div>
   );
 }
