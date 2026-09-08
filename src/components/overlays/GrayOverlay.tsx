@@ -92,7 +92,7 @@ export function GrayOverlay() {
               <span style={{ fontSize: 9, color: '#667' }}>{i + 1}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <button
-                  style={{ ...stepperButtonStyle(), minWidth: 24, minHeight: 24, fontSize: 11 }}
+                  style={{ ...stepperButtonStyle(), fontSize: 11 }}
                   onClick={() => setButtonOctave(i, oct - 1)}
                   disabled={oct <= -2}
                   aria-label={`button ${i + 1} octave down`}
@@ -101,7 +101,7 @@ export function GrayOverlay() {
                 </button>
                 <span style={{ minWidth: 16, textAlign: 'center', fontSize: 11 }}>{oct}</span>
                 <button
-                  style={{ ...stepperButtonStyle(), minWidth: 24, minHeight: 24, fontSize: 11 }}
+                  style={{ ...stepperButtonStyle(), fontSize: 11 }}
                   onClick={() => setButtonOctave(i, oct + 1)}
                   disabled={oct >= 1}
                   aria-label={`button ${i + 1} octave up`}
