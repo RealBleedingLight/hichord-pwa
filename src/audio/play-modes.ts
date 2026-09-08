@@ -122,6 +122,7 @@ export class PlayModeHandler {
   }
 
   private handleRepeatDown(voicing: ChordVoicing): void {
+    this.stopClockDrivenMode();
     this.clock.start();
     this.tickUnsubscribe = this.clock.onTick(() => {
       this.engine.triggerChord(voicing);
@@ -129,6 +130,7 @@ export class PlayModeHandler {
   }
 
   private handleArpeggioDown(voicing: ChordVoicing): void {
+    this.stopClockDrivenMode();
     this.arpeggiator.setChord(voicing);
     this.clock.start();
     this.tickUnsubscribe = this.clock.onTick((_time, step) => {
@@ -142,10 +144,10 @@ export class PlayModeHandler {
     if (this.tickUnsubscribe) {
       this.tickUnsubscribe();
       this.tickUnsubscribe = null;
-    }
-    this.clock.stop();
-    if (this.mode === 'arpeggio') {
-      this.arpeggiator.reset();
+      this.clock.stop();
+      if (this.mode === 'arpeggio') {
+        this.arpeggiator.reset();
+      }
     }
   }
 
