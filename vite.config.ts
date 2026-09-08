@@ -36,7 +36,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: [],
+    setupFiles: ['./src/test/setup-web-audio.ts'],
     alias: { '@': path.resolve(__dirname, 'src') },
   },
 });
