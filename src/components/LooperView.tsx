@@ -59,17 +59,16 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
             <span>T{track.index + 1}</span>
             <span data-testid={`looper-track-state-${track.index}`}>{STATE_LABELS[track.state] ?? track.state}</span>
             {onTrackMuteToggle && (
-              <span
-                role="button"
+              <button
                 data-testid={`looper-track-mute-${track.index}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onTrackMuteToggle(track.index);
                 }}
-                style={{ fontSize: 10, opacity: 0.8 }}
+                style={{ minWidth: 32, minHeight: 32, background: 'transparent', border: 'none', color: '#eee', fontSize: 12, cursor: 'pointer', padding: 0 }}
               >
                 {track.state === 'muted' ? '🔇' : '🔊'}
-              </span>
+              </button>
             )}
           </button>
         ))}
@@ -134,8 +133,8 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
             data-testid={`looper-bars-${n}`}
             onClick={() => setLooperBars(n)}
             style={{
-              minWidth: 28,
-              minHeight: 28,
+              minWidth: 32,
+              minHeight: 32,
               borderRadius: 6,
               border: 'none',
               background: looperBars === n ? ACCENT : '#0f1626',

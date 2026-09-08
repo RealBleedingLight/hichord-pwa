@@ -196,7 +196,10 @@ export function App() {
     const looper = looperRef.current;
     const state = useAppStore.getState();
     if (!looper) return;
-    if (state.looperState === 'looping') {
+    if (state.looperState === 'recording') {
+      looper.stopRecording(state.activeTrack);
+      state.setLooperTrack(state.activeTrack, { state: 'playing' });
+    } else if (state.looperState === 'looping') {
       looper.togglePlayback();
     }
     state.setLooperState('off');
