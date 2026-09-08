@@ -4,7 +4,7 @@ import { InfoBar } from './InfoBar';
 import { GesturePad } from './GesturePad';
 import { PianoKeys } from './PianoKeys';
 import { VolumeSlider } from './VolumeSlider';
-import { CenterArea } from './CenterArea';
+import { CenterArea, type CenterAreaProps } from './CenterArea';
 import { MenuOverlay } from './MenuOverlay';
 import type { ScaleDegree, JoystickDirection } from '@/music/types';
 
@@ -18,6 +18,7 @@ interface LayoutProps {
   volume: number;
   currentModLabel: string;
   chordLabels: string[];
+  centerAreaProps: CenterAreaProps;
 }
 
 export function Layout(props: LayoutProps) {
@@ -51,7 +52,7 @@ export function Layout(props: LayoutProps) {
       </div>
 
       {/* Center */}
-      <CenterArea />
+      <CenterArea {...props.centerAreaProps} />
 
       {/* Right: Piano Keys */}
       <div style={{ padding: '0 4px' }}>
