@@ -3,6 +3,8 @@ import { useAppStore } from '@/store';
 import { DrumView, type DrumViewProps } from './DrumView';
 import { LooperView, type LooperViewProps } from './LooperView';
 import { SequencerGrid, type SequencerGridProps } from './SequencerGrid';
+import { Tuner } from './Tuner';
+import { MicSampleView } from './MicSampleView';
 
 export interface CenterAreaProps {
   drumViewProps: DrumViewProps;
@@ -23,6 +25,14 @@ export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps 
 
   if (mode === 'sequencer') {
     return <SequencerGrid {...sequencerGridProps} />;
+  }
+
+  if (mode === 'tuner') {
+    return <Tuner />;
+  }
+
+  if (mode === 'micSample') {
+    return <MicSampleView />;
   }
 
   return (

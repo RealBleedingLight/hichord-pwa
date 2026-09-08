@@ -53,4 +53,16 @@ describe('CenterArea', () => {
     render(<CenterArea {...baseProps()} />);
     expect(screen.getByText('play mode')).toBeTruthy();
   });
+
+  it('routes to Tuner for tuner mode', () => {
+    useAppStore.setState({ playMode: 'tuner' });
+    render(<CenterArea {...baseProps()} />);
+    expect(screen.getByTestId('tuner-toggle')).toBeTruthy();
+  });
+
+  it('routes to MicSampleView for micSample mode', () => {
+    useAppStore.setState({ playMode: 'micSample' });
+    render(<CenterArea {...baseProps()} />);
+    expect(screen.getByTestId('mic-sample-record')).toBeTruthy();
+  });
 });
