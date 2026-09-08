@@ -1,15 +1,17 @@
 import type { ChordVoicing } from '@/music/types';
-import type { SynthMode, ADSREnvelope, AnalogWaveform } from './types';
+import type { SynthMode, ADSREnvelope, AnalogWaveform, EffectType } from './types';
 import { ADSR_PRESETS, FM_PRESETS } from './types';
 import { AnalogSynth } from './synth-analog';
 import { FMSynth } from './synth-fm';
 import { SampleSynth } from './synth-sample';
 import { NoiseSynth } from './synth-noise';
+import { EffectsChain } from './effects';
 
 export class AudioEngine {
   private ctx: AudioContext | OfflineAudioContext;
   private masterGain: GainNode;
   private effectsInput: GainNode;
+  private effectsChain: EffectsChain;
   private analogSynth: AnalogSynth;
   private fmSynth: FMSynth;
   private sampleSynth: SampleSynth;
@@ -26,8 +28,10 @@ export class AudioEngine {
     this.masterGain.gain.value = 0.8;
     this.masterGain.connect(this.ctx.destination);
 
+    this.effectsChain = new EffectsChain(this.ctx);
+    this.effectsChain.connect(this.masterGain);
     this.effectsInput = this.ctx.createGain();
-    this.effectsInput.connect(this.masterGain);
+    this.effectsInput.connect(this.effectsChain.getInput());
 
     this.analogSynth = new AnalogSynth(this.ctx, this.effectsInput);
     this.fmSynth = new FMSynth(this.ctx, this.effectsInput);
@@ -89,4 +93,8 @@ export class AudioEngine {
   getMasterVolume(): number { return this.masterGain.gain.value; }
   getContext(): BaseAudioContext { return this.ctx; }
   getOutputNode(): GainNode { return this.effectsInput; }
+  setEffect(type: EffectType, enabled: boolean, value: number): void {
+    this.effectsChain.setEffect(type, enabled, value);
+  }
+  getEffectsChain(): EffectsChain { return this.effectsChain; }
 }
