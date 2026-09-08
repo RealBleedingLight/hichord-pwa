@@ -1,11 +1,69 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Layout } from '@/components/Layout';
 import { useAppStore } from '@/store';
+import { AudioEngine } from '@/audio/engine';
+import { getChord } from '@/music/chord-engine';
+import type { ScaleDegree, JoystickDirection } from '@/music/types';
+import '@/styles/global.css';
 
 export function App() {
-  const key = useAppStore((s) => s.key);
-  const scale = useAppStore((s) => s.scale);
+  const engineRef = useRef<AudioEngine | null>(null);
+  const [activeKeys, setActiveKeys] = useState<Set<ScaleDegree>>(new Set());
+  const store = useAppStore();
+  const directionRef = useRef<JoystickDirection>('center');
+
+  useEffect(() => {
+    engineRef.current = new AudioEngine();
+  }, []);
+
+  const triggerChord = useCallback((degree: ScaleDegree) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.resume();
+
+    const state = useAppStore.getState();
+    const chord = getChord(
+      state.key, state.scale, degree, 4 + state.globalOctave,
+      directionRef.current, state.joystickMode, state.inversions[degree - 1]!,
+      state.bassMode, state.chordLocks,
+    );
+    engine.triggerChord(chord);
+    state.setCurrentChordName(chord.displayName);
+    setActiveKeys((prev) => new Set(prev).add(degree));
+  }, []);
+
+  const releaseChord = useCallback((degree: ScaleDegree) => {
+    engineRef.current?.releaseChord();
+    setActiveKeys((prev) => { const s = new Set(prev); s.delete(degree); return s; });
+  }, []);
+
+  const handleDirection = useCallback((dir: JoystickDirection) => {
+    directionRef.current = dir;
+    useAppStore.getState().setJoystickDirection(dir);
+  }, []);
+
+  const handleCenterTap = useCallback(() => {
+    // Looper toggle or randomize — implemented in later tasks
+  }, []);
+
+  const handleVolume = useCallback((vol: number) => {
+    useAppStore.getState().setVolume(vol);
+    engineRef.current?.setMasterVolume(vol);
+  }, []);
+
+  const chordLabels = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+
   return (
-    <div style={{ background: '#1a1a2e', color: '#eee', width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p>HiChord — {key} {scale}</p>
-    </div>
+    <Layout
+      onKeyDown={triggerChord}
+      onKeyUp={releaseChord}
+      onDirectionChange={handleDirection}
+      onCenterTap={handleCenterTap}
+      onVolumeChange={handleVolume}
+      activeKeys={activeKeys}
+      volume={store.volume}
+      currentModLabel={store.joystickDirection === 'center' ? '' : store.joystickDirection}
+      chordLabels={chordLabels}
+    />
   );
 }
