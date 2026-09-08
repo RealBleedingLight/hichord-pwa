@@ -3,6 +3,7 @@ import { Layout } from '@/components/Layout';
 import { useAppStore } from '@/store';
 import { AudioEngine } from '@/audio/engine';
 import { getChord } from '@/music/chord-engine';
+import { KeyboardHandler } from '@/input/keyboard-handler';
 import type { ScaleDegree, JoystickDirection } from '@/music/types';
 import '@/styles/global.css';
 
@@ -50,6 +51,39 @@ export function App() {
     useAppStore.getState().setVolume(vol);
     engineRef.current?.setMasterVolume(vol);
   }, []);
+
+  const handleVolumeDelta = useCallback((delta: number) => {
+    const state = useAppStore.getState();
+    const vol = Math.max(0, Math.min(1, state.volume + delta));
+    state.setVolume(vol);
+    engineRef.current?.setMasterVolume(vol);
+  }, []);
+
+  const handleFunctionButton = useCallback((btn: 'gray' | 'yellow' | 'red', down: boolean) => {
+    const state = useAppStore.getState();
+    state.setHeldFunctionButton(btn, down);
+    if (!down) {
+      state.setActiveOverlay(state.activeOverlay === btn ? null : btn);
+    }
+  }, []);
+
+  const handleTrackToggle = useCallback((index: number) => {
+    useAppStore.getState().setActiveTrack(index);
+  }, []);
+
+  useEffect(() => {
+    const keyboardHandler = new KeyboardHandler({
+      onChordDown: triggerChord,
+      onChordUp: releaseChord,
+      onDirection: handleDirection,
+      onFunctionButton: handleFunctionButton,
+      onCenterTap: handleCenterTap,
+      onVolumeChange: handleVolumeDelta,
+      onTrackToggle: handleTrackToggle,
+    });
+    keyboardHandler.attach();
+    return () => keyboardHandler.detach();
+  }, [triggerChord, releaseChord, handleDirection, handleFunctionButton, handleCenterTap, handleVolumeDelta, handleTrackToggle]);
 
   const chordLabels = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
 
