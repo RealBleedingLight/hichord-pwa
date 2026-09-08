@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { useAppStore } from '@/store';
 import { AudioEngine } from '@/audio/engine';
+import { MasterClock } from '@/audio/clock';
+import { Arpeggiator } from '@/audio/arpeggiator';
+import { PlayModeHandler } from '@/audio/play-modes';
 import { getChord } from '@/music/chord-engine';
 import { KeyboardHandler } from '@/input/keyboard-handler';
 import type { ScaleDegree, JoystickDirection } from '@/music/types';
@@ -9,18 +12,26 @@ import '@/styles/global.css';
 
 export function App() {
   const engineRef = useRef<AudioEngine | null>(null);
+  const clockRef = useRef<MasterClock | null>(null);
+  const playModeHandlerRef = useRef<PlayModeHandler | null>(null);
   const [activeKeys, setActiveKeys] = useState<Set<ScaleDegree>>(new Set());
   const store = useAppStore();
   const directionRef = useRef<JoystickDirection>('center');
 
   useEffect(() => {
-    engineRef.current = new AudioEngine();
+    const engine = new AudioEngine();
+    engineRef.current = engine;
+    const clock = new MasterClock(engine.getContext());
+    clockRef.current = clock;
+    const arpeggiator = new Arpeggiator();
+    playModeHandlerRef.current = new PlayModeHandler(engine, clock, arpeggiator);
   }, []);
 
   const triggerChord = useCallback((degree: ScaleDegree) => {
     const engine = engineRef.current;
-    if (!engine) return;
-    engine.resume();
+    const playModeHandler = playModeHandlerRef.current;
+    if (!engine || !playModeHandler) return;
+    playModeHandler.start();
 
     const state = useAppStore.getState();
     const chord = getChord(
@@ -28,13 +39,13 @@ export function App() {
       directionRef.current, state.joystickMode, state.inversions[degree - 1]!,
       state.bassMode, state.chordLocks,
     );
-    engine.triggerChord(chord);
+    playModeHandler.handleChordDown(chord);
     state.setCurrentChordName(chord.displayName);
     setActiveKeys((prev) => new Set(prev).add(degree));
   }, []);
 
   const releaseChord = useCallback((degree: ScaleDegree) => {
-    engineRef.current?.releaseChord();
+    playModeHandlerRef.current?.handleChordUp();
     setActiveKeys((prev) => { const s = new Set(prev); s.delete(degree); return s; });
   }, []);
 
@@ -70,6 +81,48 @@ export function App() {
   const handleTrackToggle = useCallback((index: number) => {
     useAppStore.getState().setActiveTrack(index);
   }, []);
+
+  // Sync play-mode routing settings to the PlayModeHandler.
+  useEffect(() => {
+    playModeHandlerRef.current?.setMode(store.playMode);
+  }, [store.playMode]);
+
+  useEffect(() => {
+    playModeHandlerRef.current?.setStrumSpeed(store.strumSpeed);
+  }, [store.strumSpeed]);
+
+  useEffect(() => {
+    playModeHandlerRef.current?.setArpSettings(store.arpPattern, store.arpRate, store.arpChordMode);
+  }, [store.arpPattern, store.arpRate, store.arpChordMode]);
+
+  useEffect(() => {
+    clockRef.current?.setBpm(store.bpm);
+  }, [store.bpm]);
+
+  // Sync synth/engine settings from the store to the AudioEngine.
+  useEffect(() => {
+    engineRef.current?.setSynthMode(store.synthMode);
+  }, [store.synthMode]);
+
+  useEffect(() => {
+    engineRef.current?.setWaveform(store.waveform);
+  }, [store.waveform]);
+
+  useEffect(() => {
+    engineRef.current?.setAdsr(store.adsr);
+  }, [store.adsr]);
+
+  useEffect(() => {
+    engineRef.current?.setFmPresetIndex(store.fmPresetIndex);
+  }, [store.fmPresetIndex]);
+
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    for (const [type, settings] of Object.entries(store.effects)) {
+      engine.setEffect(type as keyof typeof store.effects, settings.enabled, settings.value);
+    }
+  }, [store.effects]);
 
   useEffect(() => {
     const keyboardHandler = new KeyboardHandler({
