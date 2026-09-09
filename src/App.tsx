@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { useAppStore } from '@/store';
 import { AudioEngine } from '@/audio/engine';
+import { MIDIOutputController } from '@/audio/midi';
 import { MasterClock } from '@/audio/clock';
 import { Arpeggiator } from '@/audio/arpeggiator';
 import { PlayModeHandler } from '@/audio/play-modes';
@@ -87,12 +88,17 @@ export function App() {
   const currentDrumPatternRef = useRef<DrumPattern | null>(null);
   const heldAutoDrumSoundsRef = useRef<Set<DrumSound>>(new Set());
   const dbRef = useRef<HiChordDB | null>(null);
+  const midiRef = useRef<MIDIOutputController>(new MIDIOutputController());
 
   const [activeKeys, setActiveKeys] = useState<Set<ScaleDegree>>(new Set());
   const [drumPatternPlaying, setDrumPatternPlaying] = useState(false);
   const [sequencerStep, setSequencerStep] = useState<number | null>(null);
   const store = useAppStore();
   const directionRef = useRef<JoystickDirection>('center');
+
+  useEffect(() => {
+    midiRef.current.init().catch(() => { /* Web MIDI unavailable — no-op */ });
+  }, []);
 
   useEffect(() => {
     const engine = new AudioEngine();
@@ -157,11 +163,13 @@ export function App() {
     playModeHandler.handleChordDown(chord);
     state.setCurrentChordName(chord.displayName);
     setActiveKeys((prev) => new Set(prev).add(degree));
+    midiRef.current.sendChord(chord);
   }, []);
 
   const releaseChord = useCallback((degree: ScaleDegree) => {
     playModeHandlerRef.current?.handleChordUp();
     setActiveKeys((prev) => { const s = new Set(prev); s.delete(degree); return s; });
+    midiRef.current.releaseAll();
   }, []);
 
   const handleDirection = useCallback((dir: JoystickDirection) => {
