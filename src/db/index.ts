@@ -1,4 +1,4 @@
-import { openDB, type IDBPDatabase } from 'idb';
+import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Preset } from '@/audio/types';
 
 const DB_NAME = 'hichord-db';
@@ -50,10 +50,19 @@ export function importPreset(json: string): Preset {
   return obj as unknown as Preset;
 }
 
-interface HiChordDBSchema {
-  presets: Preset;
-  samples: { name: string; data: ArrayBuffer };
-  settings: { key: string; value: object };
+interface HiChordDBSchema extends DBSchema {
+  presets: {
+    key: string;
+    value: Preset;
+  };
+  samples: {
+    key: string;
+    value: { name: string; data: ArrayBuffer };
+  };
+  settings: {
+    key: string;
+    value: object;
+  };
 }
 
 /**
