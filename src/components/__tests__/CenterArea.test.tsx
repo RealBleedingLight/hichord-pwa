@@ -65,4 +65,16 @@ describe('CenterArea', () => {
     render(<CenterArea {...baseProps()} />);
     expect(screen.getByTestId('mic-sample-record')).toBeTruthy();
   });
+
+  it('routes to ChordHiro for chordHiro mode', () => {
+    useAppStore.setState({ playMode: 'chordHiro' });
+    render(<CenterArea {...baseProps()} />);
+    expect(screen.getByTestId('chord-hiro')).toBeTruthy();
+  });
+
+  it('routes to EarTrainer for earTrainer mode', () => {
+    useAppStore.setState({ playMode: 'earTrainer' });
+    render(<CenterArea {...baseProps()} />);
+    expect(screen.getByTestId('ear-trainer')).toBeTruthy();
+  });
 });
