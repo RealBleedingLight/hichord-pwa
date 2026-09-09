@@ -11,10 +11,71 @@ import { Sequencer } from '@/audio/sequencer';
 import { getChord } from '@/music/chord-engine';
 import { KeyboardHandler } from '@/input/keyboard-handler';
 import type { ScaleDegree, JoystickDirection, ChordVoicing } from '@/music/types';
-import type { DrumSound } from '@/audio/types';
+import type { DrumSound, Preset } from '@/audio/types';
 import type { DrumPattern } from '@/data/drum-patterns';
 import type { CenterAreaProps } from '@/components/CenterArea';
+import { HiChordDB } from '@/db';
+import { FACTORY_PRESETS } from '@/data/presets';
 import '@/styles/global.css';
+
+/**
+ * Extracts the current app store state as a Preset, ready to save.
+ */
+export function stateToPreset(id: string, name: string): Preset {
+  const state = useAppStore.getState();
+  return {
+    id,
+    name,
+    synthMode: state.synthMode,
+    waveform: state.waveform,
+    fmPresetIndex: state.fmPresetIndex,
+    sampleName: state.sampleName,
+    adsr: state.adsr,
+    effects: state.effects,
+    key: state.key,
+    scale: state.scale,
+    globalOctave: state.globalOctave,
+    buttonOctaves: state.buttonOctaves,
+    inversions: state.inversions,
+    chordLocks: state.chordLocks,
+    bassMode: state.bassMode,
+    voiceLeading: state.voiceLeading,
+    joystickMode: state.joystickMode,
+    drumKit: state.drumKit,
+    arpPattern: state.arpPattern,
+    arpRate: state.arpRate,
+    arpChordMode: state.arpChordMode,
+    bpm: state.bpm,
+  };
+}
+
+/**
+ * Applies a loaded Preset's fields onto the app store.
+ */
+export function applyPresetToStore(preset: Preset): void {
+  const state = useAppStore.getState();
+  state.setSynthMode(preset.synthMode);
+  state.setWaveform(preset.waveform);
+  state.setFmPresetIndex(preset.fmPresetIndex);
+  state.setSampleName(preset.sampleName);
+  state.setAdsr(preset.adsr);
+  for (const [type, settings] of Object.entries(preset.effects)) {
+    state.setEffect(type as keyof typeof preset.effects, settings);
+  }
+  state.setKey(preset.key);
+  state.setScale(preset.scale);
+  state.setGlobalOctave(preset.globalOctave);
+  preset.buttonOctaves.forEach((octave, i) => state.setButtonOctave(i, octave));
+  preset.inversions.forEach((inv, degree) => state.setInversion(degree, inv));
+  state.setBassMode(preset.bassMode);
+  state.setVoiceLeading(preset.voiceLeading);
+  state.setJoystickMode(preset.joystickMode);
+  state.setDrumKit(preset.drumKit);
+  state.setArpPattern(preset.arpPattern);
+  state.setArpRate(preset.arpRate);
+  state.setArpChordMode(preset.arpChordMode);
+  state.setBpm(preset.bpm);
+}
 
 export function App() {
   const engineRef = useRef<AudioEngine | null>(null);
@@ -25,6 +86,7 @@ export function App() {
   const sequencerRef = useRef<Sequencer>(new Sequencer());
   const currentDrumPatternRef = useRef<DrumPattern | null>(null);
   const heldAutoDrumSoundsRef = useRef<Set<DrumSound>>(new Set());
+  const dbRef = useRef<HiChordDB | null>(null);
 
   const [activeKeys, setActiveKeys] = useState<Set<ScaleDegree>>(new Set());
   const [drumPatternPlaying, setDrumPatternPlaying] = useState(false);
@@ -49,6 +111,27 @@ export function App() {
       looper.connectInput(engine.getOutputNode());
       looper.connectOutput(engine.getContext().destination);
     });
+
+    const db = new HiChordDB();
+    dbRef.current = db;
+    void db.listPresets().then((existing) => {
+      if (existing.length > 0) return;
+      return Promise.all(FACTORY_PRESETS.map((preset) => db.savePreset(preset)));
+    });
+  }, []);
+
+  const handleSavePreset = useCallback(async (id: string, name: string) => {
+    const db = dbRef.current;
+    if (!db) return;
+    const preset = stateToPreset(id, name);
+    await db.savePreset(preset);
+  }, []);
+
+  const handleLoadPreset = useCallback(async (id: string) => {
+    const db = dbRef.current;
+    if (!db) return;
+    const preset = await db.loadPreset(id);
+    applyPresetToStore(preset);
   }, []);
 
   const triggerChord = useCallback((degree: ScaleDegree) => {
