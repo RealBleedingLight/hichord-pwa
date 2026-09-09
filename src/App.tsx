@@ -10,7 +10,7 @@ import { LooperController, calculateLoopLength } from '@/audio/looper';
 import { Sequencer } from '@/audio/sequencer';
 import { getChord } from '@/music/chord-engine';
 import { KeyboardHandler } from '@/input/keyboard-handler';
-import type { ScaleDegree, JoystickDirection } from '@/music/types';
+import type { ScaleDegree, JoystickDirection, ChordVoicing } from '@/music/types';
 import type { DrumSound } from '@/audio/types';
 import type { DrumPattern } from '@/data/drum-patterns';
 import type { CenterAreaProps } from '@/components/CenterArea';
@@ -317,6 +317,14 @@ export function App() {
     return () => keyboardHandler.detach();
   }, [triggerChord, releaseChord, handleDirection, handleFunctionButton, handleCenterTap, handleVolumeDelta, handleTrackToggle]);
 
+  const handleGameChordTrigger = useCallback((voicing: ChordVoicing) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.resume();
+    engine.triggerChord(voicing);
+    setTimeout(() => engine.releaseChord(), 800);
+  }, []);
+
   const chordLabels = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
 
   const centerAreaProps: CenterAreaProps = {
@@ -337,6 +345,7 @@ export function App() {
       sequencer: sequencerRef.current,
       currentStep: sequencerStep,
     },
+    onChordTrigger: handleGameChordTrigger,
   };
 
   return (

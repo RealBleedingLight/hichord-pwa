@@ -5,14 +5,18 @@ import { LooperView, type LooperViewProps } from './LooperView';
 import { SequencerGrid, type SequencerGridProps } from './SequencerGrid';
 import { Tuner } from './Tuner';
 import { MicSampleView } from './MicSampleView';
+import { ChordHiro } from './ChordHiro';
+import { EarTrainer } from './EarTrainer';
+import type { ChordVoicing } from '@/music/types';
 
 export interface CenterAreaProps {
   drumViewProps: DrumViewProps;
   looperViewProps: LooperViewProps;
   sequencerGridProps: SequencerGridProps;
+  onChordTrigger?: (voicing: ChordVoicing) => void;
 }
 
-export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps }: CenterAreaProps) {
+export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps, onChordTrigger }: CenterAreaProps) {
   const mode = useAppStore((s) => s.playMode);
 
   if (mode === 'drum' || mode === 'drumLoops' || mode === 'autoDrum') {
@@ -33,6 +37,14 @@ export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps 
 
   if (mode === 'micSample') {
     return <MicSampleView />;
+  }
+
+  if (mode === 'chordHiro') {
+    return <ChordHiro onChordTrigger={onChordTrigger} />;
+  }
+
+  if (mode === 'earTrainer') {
+    return <EarTrainer onChordTrigger={onChordTrigger} />;
   }
 
   return (
