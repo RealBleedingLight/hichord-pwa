@@ -66,10 +66,13 @@ export class AnalogSynth {
   }
 
   release(adsr: ADSREnvelope): void {
+    const releasingVoices = [...this.activeVoices];
+    this.activeVoices = [];
+
     const now = this.ctx.currentTime;
     const releaseEnd = now + adsr.release / 1000;
 
-    for (const voice of this.activeVoices) {
+    for (const voice of releasingVoices) {
       voice.gainL.gain.cancelScheduledValues(now);
       voice.gainL.gain.setValueAtTime(voice.gainL.gain.value, now);
       voice.gainL.gain.linearRampToValueAtTime(0, releaseEnd);
@@ -82,7 +85,7 @@ export class AnalogSynth {
     }
 
     setTimeout(() => {
-      this.activeVoices = [];
+      releasingVoices.length = 0;
     }, adsr.release + 50);
   }
 

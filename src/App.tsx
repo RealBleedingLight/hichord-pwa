@@ -93,7 +93,20 @@ export function App() {
   const [activeKeys, setActiveKeys] = useState<Set<ScaleDegree>>(new Set());
   const [drumPatternPlaying, setDrumPatternPlaying] = useState(false);
   const [sequencerStep, setSequencerStep] = useState<number | null>(null);
-  const store = useAppStore();
+  const drumKit = useAppStore((s) => s.drumKit);
+  const playMode = useAppStore((s) => s.playMode);
+  const strumSpeed = useAppStore((s) => s.strumSpeed);
+  const arpPattern = useAppStore((s) => s.arpPattern);
+  const arpRate = useAppStore((s) => s.arpRate);
+  const arpChordMode = useAppStore((s) => s.arpChordMode);
+  const bpm = useAppStore((s) => s.bpm);
+  const synthMode = useAppStore((s) => s.synthMode);
+  const waveform = useAppStore((s) => s.waveform);
+  const adsr = useAppStore((s) => s.adsr);
+  const fmPresetIndex = useAppStore((s) => s.fmPresetIndex);
+  const effects = useAppStore((s) => s.effects);
+  const volume = useAppStore((s) => s.volume);
+  const joystickDirection = useAppStore((s) => s.joystickDirection);
   const directionRef = useRef<JoystickDirection>('center');
 
   useEffect(() => {
@@ -230,14 +243,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    drumEngineRef.current?.setKit(store.drumKit);
-  }, [store.drumKit]);
+    drumEngineRef.current?.setKit(drumKit);
+  }, [drumKit]);
 
   // Drives drum-loop pattern playback off the master clock.
   useEffect(() => {
     const clock = clockRef.current;
     if (!clock) return;
-    if (store.playMode !== 'drumLoops' || !drumPatternPlaying) return;
+    if (playMode !== 'drumLoops' || !drumPatternPlaying) return;
 
     clock.start();
     const unsubscribe = clock.onTick((_time, step) => {
@@ -252,13 +265,13 @@ export function App() {
       unsubscribe();
       clock.stop();
     };
-  }, [store.playMode, drumPatternPlaying]);
+  }, [playMode, drumPatternPlaying]);
 
   // Auto-drum: held pads retrigger at the clock rate.
   useEffect(() => {
     const clock = clockRef.current;
     if (!clock) return;
-    if (store.playMode !== 'autoDrum') return;
+    if (playMode !== 'autoDrum') return;
 
     clock.start();
     const unsubscribe = clock.onTick(() => {
@@ -270,7 +283,7 @@ export function App() {
       unsubscribe();
       clock.stop();
     };
-  }, [store.playMode]);
+  }, [playMode]);
 
   // --- Looper mode wiring -----------------------------------------------------
 
@@ -334,7 +347,7 @@ export function App() {
     const clock = clockRef.current;
     const engine = engineRef.current;
     if (!clock || !engine) return;
-    if (store.playMode !== 'sequencer') {
+    if (playMode !== 'sequencer') {
       setSequencerStep(null);
       return;
     }
@@ -360,49 +373,49 @@ export function App() {
       clock.stop();
       setSequencerStep(null);
     };
-  }, [store.playMode]);
+  }, [playMode]);
 
   // Sync play-mode routing settings to the PlayModeHandler.
   useEffect(() => {
-    playModeHandlerRef.current?.setMode(store.playMode);
-  }, [store.playMode]);
+    playModeHandlerRef.current?.setMode(playMode);
+  }, [playMode]);
 
   useEffect(() => {
-    playModeHandlerRef.current?.setStrumSpeed(store.strumSpeed);
-  }, [store.strumSpeed]);
+    playModeHandlerRef.current?.setStrumSpeed(strumSpeed);
+  }, [strumSpeed]);
 
   useEffect(() => {
-    playModeHandlerRef.current?.setArpSettings(store.arpPattern, store.arpRate, store.arpChordMode);
-  }, [store.arpPattern, store.arpRate, store.arpChordMode]);
+    playModeHandlerRef.current?.setArpSettings(arpPattern, arpRate, arpChordMode);
+  }, [arpPattern, arpRate, arpChordMode]);
 
   useEffect(() => {
-    clockRef.current?.setBpm(store.bpm);
-  }, [store.bpm]);
+    clockRef.current?.setBpm(bpm);
+  }, [bpm]);
 
   // Sync synth/engine settings from the store to the AudioEngine.
   useEffect(() => {
-    engineRef.current?.setSynthMode(store.synthMode);
-  }, [store.synthMode]);
+    engineRef.current?.setSynthMode(synthMode);
+  }, [synthMode]);
 
   useEffect(() => {
-    engineRef.current?.setWaveform(store.waveform);
-  }, [store.waveform]);
+    engineRef.current?.setWaveform(waveform);
+  }, [waveform]);
 
   useEffect(() => {
-    engineRef.current?.setAdsr(store.adsr);
-  }, [store.adsr]);
+    engineRef.current?.setAdsr(adsr);
+  }, [adsr]);
 
   useEffect(() => {
-    engineRef.current?.setFmPresetIndex(store.fmPresetIndex);
-  }, [store.fmPresetIndex]);
+    engineRef.current?.setFmPresetIndex(fmPresetIndex);
+  }, [fmPresetIndex]);
 
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
-    for (const [type, settings] of Object.entries(store.effects)) {
-      engine.setEffect(type as keyof typeof store.effects, settings.enabled, settings.value);
+    for (const [type, settings] of Object.entries(effects)) {
+      engine.setEffect(type as keyof typeof effects, settings.enabled, settings.value);
     }
-  }, [store.effects]);
+  }, [effects]);
 
   useEffect(() => {
     const keyboardHandler = new KeyboardHandler({
@@ -457,8 +470,8 @@ export function App() {
       onCenterTap={handleCenterTap}
       onVolumeChange={handleVolume}
       activeKeys={activeKeys}
-      volume={store.volume}
-      currentModLabel={store.joystickDirection === 'center' ? '' : store.joystickDirection}
+      volume={volume}
+      currentModLabel={joystickDirection === 'center' ? '' : joystickDirection}
       chordLabels={chordLabels}
       centerAreaProps={centerAreaProps}
     />

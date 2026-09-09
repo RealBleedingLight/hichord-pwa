@@ -63,16 +63,19 @@ export class FMSynth {
   }
 
   release(adsr: ADSREnvelope): void {
+    const releasingVoices = [...this.activeVoices];
+    this.activeVoices = [];
+
     const now = this.ctx.currentTime;
     const releaseEnd = now + adsr.release / 1000;
-    for (const voice of this.activeVoices) {
+    for (const voice of releasingVoices) {
       voice.envGain.gain.cancelScheduledValues(now);
       voice.envGain.gain.setValueAtTime(voice.envGain.gain.value, now);
       voice.envGain.gain.linearRampToValueAtTime(0, releaseEnd);
       voice.carrier.stop(releaseEnd + 0.01);
       voice.modulator.stop(releaseEnd + 0.01);
     }
-    setTimeout(() => { this.activeVoices = []; }, adsr.release + 50);
+    setTimeout(() => { releasingVoices.length = 0; }, adsr.release + 50);
   }
 
   stop(): void {
