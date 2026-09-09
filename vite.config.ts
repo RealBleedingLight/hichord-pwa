@@ -12,7 +12,7 @@ export default defineConfig({
       manifest: {
         name: 'HiChord',
         short_name: 'HiChord',
-        display: 'fullscreen',
+        display: 'standalone',
         orientation: 'landscape',
         theme_color: '#1a1a2e',
         background_color: '#1a1a2e',
