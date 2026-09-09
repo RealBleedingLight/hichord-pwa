@@ -91,6 +91,7 @@ export function App() {
   const midiRef = useRef<MIDIOutputController>(new MIDIOutputController());
 
   const [activeKeys, setActiveKeys] = useState<Set<ScaleDegree>>(new Set());
+  const activeKeysRef = useRef<Set<ScaleDegree>>(new Set());
   const [drumPatternPlaying, setDrumPatternPlaying] = useState(false);
   const [sequencerStep, setSequencerStep] = useState<number | null>(null);
   const drumKit = useAppStore((s) => s.drumKit);
@@ -175,13 +176,13 @@ export function App() {
     );
     playModeHandler.handleChordDown(chord);
     state.setCurrentChordName(chord.displayName);
-    setActiveKeys((prev) => new Set(prev).add(degree));
+    setActiveKeys((prev) => { const s = new Set(prev).add(degree); activeKeysRef.current = s; return s; });
     midiRef.current.sendChord(chord);
   }, []);
 
   const releaseChord = useCallback((degree: ScaleDegree) => {
     playModeHandlerRef.current?.handleChordUp();
-    setActiveKeys((prev) => { const s = new Set(prev); s.delete(degree); return s; });
+    setActiveKeys((prev) => { const s = new Set(prev); s.delete(degree); activeKeysRef.current = s; return s; });
     if (useAppStore.getState().playMode !== 'drone') {
       midiRef.current.releaseAll();
     }
@@ -190,6 +191,23 @@ export function App() {
   const handleDirection = useCallback((dir: JoystickDirection) => {
     directionRef.current = dir;
     useAppStore.getState().setJoystickDirection(dir);
+    // Retrigger held chord with new joystick direction
+    const held = activeKeysRef.current;
+    if (held.size > 0) {
+      const engine = engineRef.current;
+      const playModeHandler = playModeHandlerRef.current;
+      if (!engine || !playModeHandler) return;
+      const state = useAppStore.getState();
+      const degree = held.values().next().value as ScaleDegree;
+      const chord = getChord(
+        state.key, state.scale, degree, 4 + state.globalOctave,
+        dir, state.joystickMode, state.inversions[degree - 1]!,
+        state.bassMode, state.chordLocks,
+      );
+      playModeHandler.handleChordDown(chord);
+      state.setCurrentChordName(chord.displayName);
+      midiRef.current.sendChord(chord);
+    }
   }, []);
 
   const handleCenterTap = useCallback(() => {
