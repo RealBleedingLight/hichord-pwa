@@ -189,16 +189,16 @@ export function App() {
   }, []);
 
   const handleDirection = useCallback((dir: JoystickDirection) => {
+    const prevDir = directionRef.current;
     directionRef.current = dir;
     useAppStore.getState().setJoystickDirection(dir);
-    // Retrigger held chord with new joystick direction
-    const held = activeKeysRef.current;
-    if (held.size > 0) {
+    // Retrigger held chord only when direction actually changed
+    if (dir !== prevDir && activeKeysRef.current.size > 0) {
       const engine = engineRef.current;
       const playModeHandler = playModeHandlerRef.current;
       if (!engine || !playModeHandler) return;
       const state = useAppStore.getState();
-      const degree = held.values().next().value as ScaleDegree;
+      const degree = activeKeysRef.current.values().next().value as ScaleDegree;
       const chord = getChord(
         state.key, state.scale, degree, 4 + state.globalOctave,
         dir, state.joystickMode, state.inversions[degree - 1]!,
