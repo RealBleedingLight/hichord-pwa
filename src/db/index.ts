@@ -47,6 +47,44 @@ export function importPreset(json: string): Preset {
     }
   }
 
+  const arrayFields: (keyof Preset)[] = ['buttonOctaves', 'inversions', 'chordLocks'];
+  for (const field of arrayFields) {
+    if (!Array.isArray(obj[field])) {
+      throw new Error(`importPreset: field "${field}" must be an array`);
+    }
+  }
+
+  const stringFields: (keyof Preset)[] = [
+    'id', 'name', 'synthMode', 'waveform', 'sampleName', 'key', 'scale',
+    'bassMode', 'joystickMode', 'drumKit', 'arpPattern', 'arpRate', 'arpChordMode',
+  ];
+  for (const field of stringFields) {
+    if (typeof obj[field] !== 'string') {
+      throw new Error(`importPreset: field "${field}" must be a string`);
+    }
+  }
+
+  const numberFields: (keyof Preset)[] = ['fmPresetIndex', 'globalOctave', 'bpm'];
+  for (const field of numberFields) {
+    if (typeof obj[field] !== 'number') {
+      throw new Error(`importPreset: field "${field}" must be a number`);
+    }
+  }
+
+  const booleanFields: (keyof Preset)[] = ['voiceLeading'];
+  for (const field of booleanFields) {
+    if (typeof obj[field] !== 'boolean') {
+      throw new Error(`importPreset: field "${field}" must be a boolean`);
+    }
+  }
+
+  const objectFields: (keyof Preset)[] = ['adsr', 'effects'];
+  for (const field of objectFields) {
+    if (typeof obj[field] !== 'object' || obj[field] === null) {
+      throw new Error(`importPreset: field "${field}" must be an object`);
+    }
+  }
+
   return obj as unknown as Preset;
 }
 

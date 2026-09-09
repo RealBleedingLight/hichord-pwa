@@ -117,21 +117,29 @@ export function App() {
     void db.listPresets().then((existing) => {
       if (existing.length > 0) return;
       return Promise.all(FACTORY_PRESETS.map((preset) => db.savePreset(preset)));
-    });
+    }).catch(console.error);
   }, []);
 
   const handleSavePreset = useCallback(async (id: string, name: string) => {
     const db = dbRef.current;
     if (!db) return;
-    const preset = stateToPreset(id, name);
-    await db.savePreset(preset);
+    try {
+      const preset = stateToPreset(id, name);
+      await db.savePreset(preset);
+    } catch (err) {
+      console.error(err);
+    }
   }, []);
 
   const handleLoadPreset = useCallback(async (id: string) => {
     const db = dbRef.current;
     if (!db) return;
-    const preset = await db.loadPreset(id);
-    applyPresetToStore(preset);
+    try {
+      const preset = await db.loadPreset(id);
+      applyPresetToStore(preset);
+    } catch (err) {
+      console.error(err);
+    }
   }, []);
 
   const triggerChord = useCallback((degree: ScaleDegree) => {
