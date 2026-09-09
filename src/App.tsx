@@ -169,7 +169,9 @@ export function App() {
   const releaseChord = useCallback((degree: ScaleDegree) => {
     playModeHandlerRef.current?.handleChordUp();
     setActiveKeys((prev) => { const s = new Set(prev); s.delete(degree); return s; });
-    midiRef.current.releaseAll();
+    if (useAppStore.getState().playMode !== 'drone') {
+      midiRef.current.releaseAll();
+    }
   }, []);
 
   const handleDirection = useCallback((dir: JoystickDirection) => {

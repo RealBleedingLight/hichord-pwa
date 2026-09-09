@@ -21,6 +21,8 @@ function makeFakeOutput() {
   return { id: 'out-1', name: 'Fake Output', send: vi.fn() };
 }
 
+const DEFAULT_VELOCITY_CONST = 100;
+
 describe('MIDIOutputController', () => {
   const originalRequestMIDIAccess = (navigator as any).requestMIDIAccess;
 
@@ -148,5 +150,3 @@ describe('MIDIOutputController', () => {
     }).not.toThrow();
   });
 });
-
-const DEFAULT_VELOCITY_CONST = 100;
