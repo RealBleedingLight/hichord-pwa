@@ -162,13 +162,22 @@ export function App() {
     }
   }, []);
 
+  const DRUM_DEGREE_MAP: DrumSound[] = ['kick', 'altKick', 'snare', 'closedHH', 'tom', 'bellRide', 'openHH'];
+
   const triggerChord = useCallback((degree: ScaleDegree) => {
     const engine = engineRef.current;
     const playModeHandler = playModeHandlerRef.current;
     if (!engine || !playModeHandler) return;
-    playModeHandler.start();
 
     const state = useAppStore.getState();
+    // In drum modes, piano keys trigger drum sounds
+    if (state.playMode === 'drum' || state.playMode === 'drumLoops' || state.playMode === 'autoDrum') {
+      const sound = DRUM_DEGREE_MAP[degree - 1];
+      if (sound) drumEngineRef.current?.triggerDrum(sound);
+      return;
+    }
+
+    playModeHandler.start();
     const chord = getChord(
       state.key, state.scale, degree, 4 + state.globalOctave,
       directionRef.current, state.joystickMode, state.inversions[degree - 1]!,
@@ -457,6 +466,10 @@ export function App() {
     setTimeout(() => engine.releaseChord(), 800);
   }, []);
 
+  const handleBottomLooperRecord = useCallback(() => {
+    handleLooperRecordToggle(useAppStore.getState().activeTrack);
+  }, [handleLooperRecordToggle]);
+
   const chordLabels = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
 
   const centerAreaProps: CenterAreaProps = {
@@ -492,6 +505,9 @@ export function App() {
       currentModLabel={joystickDirection === 'center' ? '' : joystickDirection}
       chordLabels={chordLabels}
       centerAreaProps={centerAreaProps}
+      onLooperRecord={handleBottomLooperRecord}
+      onLooperStop={handleLooperStop}
+      onLooperPlay={handleLooperPlayToggle}
     />
   );
 }

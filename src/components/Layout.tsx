@@ -6,6 +6,7 @@ import { PianoKeys } from './PianoKeys';
 import { VolumeSlider } from './VolumeSlider';
 import { CenterArea, type CenterAreaProps } from './CenterArea';
 import { MenuOverlay } from './MenuOverlay';
+import { useAppStore } from '@/store';
 import type { ScaleDegree, JoystickDirection } from '@/music/types';
 
 interface LayoutProps {
@@ -19,6 +20,45 @@ interface LayoutProps {
   currentModLabel: string;
   chordLabels: string[];
   centerAreaProps: CenterAreaProps;
+  onLooperRecord: () => void;
+  onLooperStop: () => void;
+  onLooperPlay: () => void;
+}
+
+const LOOP_BTN: React.CSSProperties = {
+  minWidth: 32, minHeight: 32, borderRadius: 6, border: 'none',
+  fontSize: 14, cursor: 'pointer', touchAction: 'manipulation',
+};
+
+function LooperStrip({ onRecord, onStop, onPlay }: { onRecord: () => void; onStop: () => void; onPlay: () => void }) {
+  const looperState = useAppStore((s) => s.looperState);
+  const looperTracks = useAppStore((s) => s.looperTracks);
+
+  return (
+    <div style={{
+      gridColumn: '1 / -1', background: '#16213e', borderRadius: 6,
+      display: 'flex', alignItems: 'center', padding: '0 8px', gap: 6, fontSize: 11, color: '#668',
+    }}>
+      {looperTracks.map((t) => (
+        <span key={t.index} style={{
+          color: t.state === 'recording' ? '#e04040' : t.state === 'playing' ? '#2ecc71' : t.state === 'muted' ? '#555' : '#668',
+        }}>T{t.index + 1}</span>
+      ))}
+      <span style={{ flex: 1 }} />
+      <button data-testid="bottom-looper-record" onClick={onRecord}
+        style={{ ...LOOP_BTN, background: looperState === 'recording' ? '#e04040' : '#0f1626', color: '#eee' }}>
+        ⏺
+      </button>
+      <button data-testid="bottom-looper-stop" onClick={onStop}
+        style={{ ...LOOP_BTN, background: '#0f1626', color: '#eee' }}>
+        ⏹
+      </button>
+      <button data-testid="bottom-looper-play" onClick={onPlay}
+        style={{ ...LOOP_BTN, background: looperState === 'looping' ? '#4a9eff' : '#0f1626', color: looperState === 'looping' ? '#111' : '#eee' }}>
+        ▶
+      </button>
+    </div>
+  );
 }
 
 export function Layout(props: LayoutProps) {
@@ -65,22 +105,11 @@ export function Layout(props: LayoutProps) {
       </div>
 
       {/* Bottom: Looper strip */}
-      <div style={{
-        gridColumn: '1 / -1',
-        background: '#16213e',
-        borderRadius: 6,
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 12px',
-        gap: 12,
-        fontSize: 11,
-        color: '#668',
-      }}>
-        {[1, 2, 3, 4, 5, 6].map((t) => (
-          <span key={t}>T{t} ░░░░</span>
-        ))}
-        <span style={{ marginLeft: 'auto' }}>⏺ ⏹ ▶</span>
-      </div>
+      <LooperStrip
+        onRecord={props.onLooperRecord}
+        onStop={props.onLooperStop}
+        onPlay={props.onLooperPlay}
+      />
 
       <MenuOverlay />
     </div>
