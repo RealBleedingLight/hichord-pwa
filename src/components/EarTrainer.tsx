@@ -1,5 +1,5 @@
 // src/components/EarTrainer.tsx
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store';
 import type { ChordQuality, ChordVoicing } from '@/music/types';
 import {
@@ -35,7 +35,10 @@ export function EarTrainer({ onChordTrigger }: EarTrainerProps) {
     gameRef.current = new EarTrainerGame(key, scale);
   }
   const game = gameRef.current;
-  game.setKeyScale(key, scale);
+
+  useEffect(() => {
+    game.setKeyScale(key, scale);
+  }, [game, key, scale]);
 
   const [snapshot, setSnapshot] = useState<EarTrainerSnapshot>(() => game.getSnapshot());
   const [level, setLevelState] = useState<EarTrainerLevel>(1);
