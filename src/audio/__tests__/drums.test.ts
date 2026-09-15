@@ -27,13 +27,15 @@ describe('DrumEngine', () => {
     expect(max).toBeGreaterThan(0.01);
   });
 
-  it('maps all 7 drum sounds', () => {
+  it('maps all drum sounds including expanded set', () => {
     const ctx = new OfflineAudioContext(2, 48000, 48000);
     const output = ctx.createGain();
     const drums = new DrumEngine(ctx, output);
 
     const sounds: import('@/audio/types').DrumSound[] = [
       'kick', 'altKick', 'snare', 'closedHH', 'tom', 'bellRide', 'openHH',
+      'clap', 'rim', 'tomHigh', 'tomLow', 'perc', 'crash', 'ride', 'shaker',
+      'fx1', 'fx2', 'fx3', 'fx4',
     ];
     for (const sound of sounds) {
       const buf = drums.generateSynthDrum(sound);

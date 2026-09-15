@@ -64,14 +64,19 @@ function LooperStrip({ onRecord, onStop, onPlay }: { onRecord: () => void; onSto
   );
 }
 
+const FULL_WIDTH_MODES: Set<string> = new Set(['drum', 'drumLoops', 'autoDrum', 'sequencer']);
+
 export function Layout(props: LayoutProps) {
+  const playMode = useAppStore((s) => s.playMode);
+  const isFullWidth = FULL_WIDTH_MODES.has(playMode);
+
   return (
     <div style={{
       width: '100vw',
       height: '100vh',
       display: 'grid',
       gridTemplateRows: '36px 1fr 40px',
-      gridTemplateColumns: '38% 1fr 30%',
+      gridTemplateColumns: isFullWidth ? '1fr' : '38% 1fr 30%',
       background: CYBER.bg,
       gap: 4,
       padding: 4,
@@ -82,30 +87,34 @@ export function Layout(props: LayoutProps) {
         <InfoBar />
       </div>
 
-      {/* Left: Gesture Pad + Volume */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 4px' }}>
-        <div style={{ flex: 1 }}>
-          <GesturePad
-            onDirectionChange={props.onDirectionChange}
-            onCenterTap={props.onCenterTap}
-            currentLabel={props.currentModLabel}
-          />
+      {!isFullWidth && (
+        /* Left: Gesture Pad + Volume */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 4px' }}>
+          <div style={{ flex: 1 }}>
+            <GesturePad
+              onDirectionChange={props.onDirectionChange}
+              onCenterTap={props.onCenterTap}
+              currentLabel={props.currentModLabel}
+            />
+          </div>
+          <VolumeSlider value={props.volume} onChange={props.onVolumeChange} />
         </div>
-        <VolumeSlider value={props.volume} onChange={props.onVolumeChange} />
-      </div>
+      )}
 
       {/* Center */}
       <CenterArea {...props.centerAreaProps} />
 
-      {/* Right: Piano Keys */}
-      <div style={{ padding: '0 4px' }}>
-        <PianoKeys
-          onKeyDown={props.onKeyDown}
-          onKeyUp={props.onKeyUp}
-          activeKeys={props.activeKeys}
-          labels={props.chordLabels}
-        />
-      </div>
+      {!isFullWidth && (
+        /* Right: Piano Keys */
+        <div style={{ padding: '0 4px' }}>
+          <PianoKeys
+            onKeyDown={props.onKeyDown}
+            onKeyUp={props.onKeyUp}
+            activeKeys={props.activeKeys}
+            labels={props.chordLabels}
+          />
+        </div>
+      )}
 
       {/* Bottom: Looper strip */}
       <LooperStrip
