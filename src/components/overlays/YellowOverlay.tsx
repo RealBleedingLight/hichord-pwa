@@ -3,9 +3,8 @@ import { useAppStore } from '@/store';
 import type { SynthMode, AnalogWaveform, EffectType } from '@/audio/types';
 import { FM_PRESETS, ADSR_PRESETS } from '@/audio/types';
 import type { ADSRPresetName } from '@/audio/types';
-import type { BassMode, JoystickMode } from '@/music/types';
 import {
-  sectionLabelStyle, sectionStyle, rowStyle, chipStyle, toggleRowStyle, sliderStyle,
+  sectionLabelStyle, sectionStyle, rowStyle, chipStyle, sliderStyle,
 } from './shared';
 import { CYBER } from '@/theme';
 
@@ -22,7 +21,7 @@ const WAVEFORMS: { value: AnalogWaveform; label: string }[] = [
   { value: 'sine', label: 'SINE' },
   { value: 'sawtooth', label: 'SAW' },
   { value: 'square', label: 'SQUARE' },
-  { value: 'triangle', label: 'TRIANGLE' },
+  { value: 'triangle', label: 'TRI' },
 ];
 
 const EFFECT_META: Record<EffectType, { label: string; min: number; max: number; step: number }> = {
@@ -43,17 +42,7 @@ const EFFECT_ORDER: EffectType[] = [
 
 const ADSR_PRESET_NAMES: ADSRPresetName[] = ['LONG', 'SHORT', 'SWELL', 'PLUCK', 'TOUCH', 'SUSTAIN'];
 
-const BASS_MODES: { value: BassMode; label: string }[] = [
-  { value: 'off', label: 'OFF' },
-  { value: 'root', label: 'ROOT' },
-  { value: 'slash', label: 'SLASH' },
-];
-
-const JOYSTICK_MODES: { value: JoystickMode; label: string }[] = [
-  { value: 'default', label: 'DEFAULT' },
-  { value: 'extended', label: 'EXTENDED' },
-  { value: 'chromatic', label: 'CHROMATIC' },
-];
+const LABEL_COLOR = '#665520';
 
 export function YellowOverlay() {
   const synthMode = useAppStore((s) => s.synthMode);
@@ -66,20 +55,18 @@ export function YellowOverlay() {
   const setEffect = useAppStore((s) => s.setEffect);
   const adsr = useAppStore((s) => s.adsr);
   const setAdsr = useAppStore((s) => s.setAdsr);
-  const bassMode = useAppStore((s) => s.bassMode);
-  const setBassMode = useAppStore((s) => s.setBassMode);
-  const voiceLeading = useAppStore((s) => s.voiceLeading);
-  const setVoiceLeading = useAppStore((s) => s.setVoiceLeading);
-  const joystickMode = useAppStore((s) => s.joystickMode);
-  const setJoystickMode = useAppStore((s) => s.setJoystickMode);
 
   return (
     <div>
       <div style={sectionStyle}>
         <div style={sectionLabelStyle(ACCENT)}>Instrument</div>
-        <div style={rowStyle}>
+        <div style={{ display: 'flex', gap: 6 }}>
           {SYNTH_MODES.map((m) => (
-            <button key={m.value} style={chipStyle(synthMode === m.value, ACCENT)} onClick={() => setSynthMode(m.value)}>
+            <button
+              key={m.value}
+              style={{ ...chipStyle(synthMode === m.value, ACCENT), flex: 1, textAlign: 'center' }}
+              onClick={() => setSynthMode(m.value)}
+            >
               {m.label}
             </button>
           ))}
@@ -113,38 +100,10 @@ export function YellowOverlay() {
       )}
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle(ACCENT)}>Effects</div>
-        {EFFECT_ORDER.map((type) => {
-          const meta = EFFECT_META[type];
-          const state = effects[type];
-          return (
-            <div key={type} style={toggleRowStyle}>
-              <button
-                style={{ ...chipStyle(state.enabled, ACCENT), minWidth: 92, textAlign: 'left' }}
-                onClick={() => setEffect(type, { enabled: !state.enabled })}
-              >
-                {meta.label}
-              </button>
-              <input
-                type="range"
-                style={sliderStyle}
-                min={meta.min}
-                max={meta.max}
-                step={meta.step}
-                value={state.value}
-                onChange={(e) => setEffect(type, { value: parseFloat(e.target.value) })}
-                aria-label={`${meta.label} value`}
-              />
-              <span style={{ fontSize: 10, minWidth: 36, textAlign: 'right', color: '#889' }}>
-                {Number.isInteger(meta.step) ? state.value : state.value.toFixed(2)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div style={sectionStyle}>
         <div style={sectionLabelStyle(ACCENT)}>Envelope (ADSR)</div>
+        <svg viewBox="0 0 120 28" style={{ width: 120, height: 28 }}>
+          <polyline points="0,28 12,2 30,10 75,10 120,28" fill="none" stroke={CYBER.amber} strokeWidth="1.5" opacity="0.8" />
+        </svg>
         <div style={rowStyle}>
           {ADSR_PRESET_NAMES.map((name) => (
             <button
@@ -168,8 +127,8 @@ export function YellowOverlay() {
               { key: 'release' as const, label: 'R', max: 3000 },
             ]
           ).map((f) => (
-            <div key={f.key} style={toggleRowStyle}>
-              <span style={{ fontSize: 11, minWidth: 12, color: '#889' }}>{f.label}</span>
+            <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, minWidth: 12, color: LABEL_COLOR }}>{f.label}</span>
               <input
                 type="range"
                 style={sliderStyle}
@@ -180,7 +139,7 @@ export function YellowOverlay() {
                 onChange={(e) => setAdsr({ ...adsr, [f.key]: parseFloat(e.target.value) })}
                 aria-label={`ADSR ${f.label}`}
               />
-              <span style={{ fontSize: 10, minWidth: 40, textAlign: 'right', color: '#889' }}>
+              <span style={{ fontSize: 10, minWidth: 40, textAlign: 'right', color: LABEL_COLOR }}>
                 {f.key === 'sustain' ? adsr[f.key].toFixed(2) : Math.round(adsr[f.key])}
               </span>
             </div>
@@ -189,31 +148,45 @@ export function YellowOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle(ACCENT)}>Bass Mode</div>
-        <div style={rowStyle}>
-          {BASS_MODES.map((m) => (
-            <button key={m.value} style={chipStyle(bassMode === m.value, ACCENT)} onClick={() => setBassMode(m.value)}>
-              {m.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={sectionStyle}>
-        <div style={sectionLabelStyle(ACCENT)}>Voice Leading</div>
-        <button style={chipStyle(voiceLeading, ACCENT)} onClick={() => setVoiceLeading(!voiceLeading)}>
-          {voiceLeading ? 'ON' : 'OFF'}
-        </button>
-      </div>
-
-      <div style={sectionStyle}>
-        <div style={sectionLabelStyle(ACCENT)}>Joystick Mode</div>
-        <div style={rowStyle}>
-          {JOYSTICK_MODES.map((m) => (
-            <button key={m.value} style={chipStyle(joystickMode === m.value, ACCENT)} onClick={() => setJoystickMode(m.value)}>
-              {m.label}
-            </button>
-          ))}
+        <div style={sectionLabelStyle(ACCENT)}>Effects</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          {EFFECT_ORDER.map((type) => {
+            const meta = EFFECT_META[type];
+            const state = effects[type];
+            return (
+              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button
+                  onClick={() => setEffect(type, { enabled: !state.enabled })}
+                  aria-label={`toggle ${meta.label}`}
+                  aria-pressed={state.enabled}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    minWidth: 8,
+                    padding: 0,
+                    borderRadius: 2,
+                    background: state.enabled ? CYBER.amber : 'transparent',
+                    border: state.enabled ? 'none' : '1px solid #443300',
+                    boxShadow: state.enabled ? '0 0 4px ' + CYBER.amberGlow : 'none',
+                    cursor: 'pointer',
+                  }}
+                />
+                <span style={{ fontSize: 8, color: state.enabled ? CYBER.amber : '#665520', minWidth: 40 }}>
+                  {meta.label}
+                </span>
+                <input
+                  type="range"
+                  style={{ ...sliderStyle, height: 3 }}
+                  min={meta.min}
+                  max={meta.max}
+                  step={meta.step}
+                  value={state.value}
+                  onChange={(e) => setEffect(type, { value: parseFloat(e.target.value) })}
+                  aria-label={`${meta.label} value`}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
