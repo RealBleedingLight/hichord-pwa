@@ -1,8 +1,9 @@
 // src/components/Tuner.tsx
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Tuner as TunerEngine } from '@/audio/tuner';
+import { CYBER } from '@/theme';
 
-const ACCENT = '#4a9eff';
+const ACCENT = CYBER.primary;
 const IN_TUNE_COLOR = '#2ecc71';
 const CENTS_RANGE = 50;
 
@@ -86,13 +87,13 @@ export function Tuner() {
           width: '80%',
           maxWidth: 300,
           height: 12,
-          background: '#0f1626',
+          background: '#1a0808',
           borderRadius: 6,
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 2, background: '#445', marginLeft: -1 }} />
+        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 2, background: CYBER.textDim, marginLeft: -1 }} />
         <div
           data-testid="tuner-needle"
           style={{
@@ -119,7 +120,7 @@ export function Tuner() {
           minHeight: 44,
           borderRadius: 8,
           border: 'none',
-          background: listening ? '#e04040' : ACCENT,
+          background: listening ? CYBER.primary : ACCENT,
           color: '#fff',
           fontSize: 14,
           fontWeight: 700,

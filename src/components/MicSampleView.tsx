@@ -1,8 +1,9 @@
 // src/components/MicSampleView.tsx
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MicSampler } from '@/audio/mic-sampler';
+import { CYBER } from '@/theme';
 
-const ACCENT = '#4a9eff';
+const ACCENT = CYBER.primary;
 
 export function MicSampleView() {
   const samplerRef = useRef<MicSampler | null>(null);
@@ -74,7 +75,7 @@ export function MicSampleView() {
       </div>
 
       {pitch !== null && (
-        <div data-testid="mic-sample-pitch" style={{ fontSize: 12, color: '#667' }}>
+        <div data-testid="mic-sample-pitch" style={{ fontSize: 12, color: CYBER.textDim }}>
           Detected pitch: {pitch.toFixed(1)} Hz
         </div>
       )}
@@ -89,7 +90,7 @@ export function MicSampleView() {
           minHeight: 44,
           borderRadius: 8,
           border: 'none',
-          background: recording ? '#e04040' : ACCENT,
+          background: recording ? CYBER.primary : ACCENT,
           color: '#fff',
           fontSize: 14,
           fontWeight: 700,

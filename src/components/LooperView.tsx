@@ -1,11 +1,12 @@
 // src/components/LooperView.tsx
 import { useAppStore } from '@/store';
+import { CYBER } from '@/theme';
 
-const ACCENT = '#4a9eff';
+const ACCENT = CYBER.primary;
 
 const STATE_COLORS: Record<string, string> = {
-  empty: '#0f1626',
-  recording: '#e04040',
+  empty: '#1a0808',
+  recording: CYBER.primary,
   playing: '#2ecc71',
   muted: '#555',
 };
@@ -48,7 +49,7 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
               padding: '4px 10px',
               borderRadius: 6,
               border: activeTrack === track.index ? `2px solid ${ACCENT}` : '2px solid transparent',
-              background: STATE_COLORS[track.state] ?? '#0f1626',
+              background: STATE_COLORS[track.state] ?? '#1a0808',
               color: '#eee',
               fontSize: 11,
               fontWeight: 700,
@@ -83,7 +84,7 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
             minHeight: 44,
             borderRadius: '50%',
             border: 'none',
-            background: looperState === 'recording' ? '#e04040' : '#0f1626',
+            background: looperState === 'recording' ? CYBER.primary : '#1a0808',
             color: '#eee',
             fontSize: 18,
             cursor: 'pointer',
@@ -99,7 +100,7 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
             minHeight: 44,
             borderRadius: 8,
             border: 'none',
-            background: '#0f1626',
+            background: '#1a0808',
             color: '#eee',
             fontSize: 18,
             cursor: 'pointer',
@@ -115,7 +116,7 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
             minHeight: 44,
             borderRadius: 8,
             border: 'none',
-            background: looperState === 'looping' ? ACCENT : '#0f1626',
+            background: looperState === 'looping' ? ACCENT : '#1a0808',
             color: looperState === 'looping' ? '#111' : '#eee',
             fontSize: 18,
             cursor: 'pointer',
@@ -126,7 +127,7 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-        <span style={{ fontSize: 10, color: '#667' }}>BARS</span>
+        <span style={{ fontSize: 10, color: CYBER.textDim }}>BARS</span>
         {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
           <button
             key={n}
@@ -137,8 +138,8 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
               minHeight: 32,
               borderRadius: 6,
               border: 'none',
-              background: looperBars === n ? ACCENT : '#0f1626',
-              color: looperBars === n ? '#111' : '#cdd',
+              background: looperBars === n ? ACCENT : '#1a0808',
+              color: looperBars === n ? '#111' : CYBER.textLight,
               fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',

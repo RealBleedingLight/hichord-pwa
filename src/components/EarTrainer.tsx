@@ -8,8 +8,9 @@ import {
   type EarTrainerSnapshot,
   qualityLabel,
 } from './earTrainerGame';
+import { CYBER } from '@/theme';
 
-const ACCENT = '#4a9eff';
+const ACCENT = CYBER.primary;
 const GREEN = '#3ecf6e';
 const RED = '#e04040';
 
