@@ -48,10 +48,10 @@ describe('CenterArea', () => {
     expect(screen.getByTestId('sequencer-step-0')).toBeTruthy();
   });
 
-  it('shows placeholder text for other modes', () => {
-    useAppStore.setState({ playMode: 'play' });
+  it('shows default waveform display for other modes', () => {
+    useAppStore.setState({ playMode: 'play', synthMode: 'analog' });
     render(<CenterArea {...baseProps()} />);
-    expect(screen.getByText('play mode')).toBeTruthy();
+    expect(screen.getByText('ANALOG')).toBeTruthy();
   });
 
   it('routes to Tuner for tuner mode', () => {
