@@ -13,15 +13,24 @@ describe('DrumView', () => {
     resetStore();
   });
 
-  it('renders all 7 drum pads', () => {
+  it('renders all 16 drum pads', () => {
     render(<DrumView onTriggerDrum={vi.fn()} />);
     expect(screen.getByTestId('drum-pad-kick')).toBeTruthy();
-    expect(screen.getByTestId('drum-pad-altKick')).toBeTruthy();
     expect(screen.getByTestId('drum-pad-snare')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-clap')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-rim')).toBeTruthy();
     expect(screen.getByTestId('drum-pad-closedHH')).toBeTruthy();
     expect(screen.getByTestId('drum-pad-openHH')).toBeTruthy();
-    expect(screen.getByTestId('drum-pad-tom')).toBeTruthy();
-    expect(screen.getByTestId('drum-pad-bellRide')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-tomHigh')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-tomLow')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-perc')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-crash')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-ride')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-shaker')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-fx1')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-fx2')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-fx3')).toBeTruthy();
+    expect(screen.getByTestId('drum-pad-fx4')).toBeTruthy();
   });
 
   it('calls onTriggerDrum when a pad is pressed', () => {

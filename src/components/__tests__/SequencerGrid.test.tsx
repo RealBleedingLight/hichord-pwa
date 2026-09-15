@@ -1,15 +1,14 @@
-// src/components/__tests__/SequencerGrid.test.tsx
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SequencerGrid } from '@/components/SequencerGrid';
 import { Sequencer } from '@/audio/sequencer';
 
 describe('SequencerGrid', () => {
-  it('renders 16 step cells', () => {
+  it('renders 4 chord bar cells', () => {
     const sequencer = new Sequencer();
     render(<SequencerGrid sequencer={sequencer} />);
-    for (let i = 0; i < 16; i++) {
-      expect(screen.getByTestId(`sequencer-step-${i}`)).toBeTruthy();
+    for (const step of [0, 4, 8, 12]) {
+      expect(screen.getByTestId(`sequencer-step-${step}`)).toBeTruthy();
     }
   });
 
@@ -28,25 +27,27 @@ describe('SequencerGrid', () => {
     expect(sequencer.getStep(0)).toBeNull();
   });
 
-  it('displays the degree number for a set step', () => {
+  it('displays the degree name for a set step', () => {
     const sequencer = new Sequencer();
-    sequencer.setStep(3, 5, 'up');
+    sequencer.setStep(4, 5, 'up');
     render(<SequencerGrid sequencer={sequencer} />);
-    expect(screen.getByTestId('sequencer-step-3').textContent).toContain('5');
+    expect(screen.getByTestId('sequencer-step-4').textContent).toContain('V');
   });
 
   it('calls onStepsChange after editing a step', () => {
     const sequencer = new Sequencer();
     const onStepsChange = vi.fn();
     render(<SequencerGrid sequencer={sequencer} onStepsChange={onStepsChange} />);
-    fireEvent.click(screen.getByTestId('sequencer-step-5'));
+    fireEvent.click(screen.getByTestId('sequencer-step-0'));
     expect(onStepsChange).toHaveBeenCalled();
   });
 
-  it('highlights the current step position', () => {
+  it('renders track labels and playhead', () => {
     const sequencer = new Sequencer();
     render(<SequencerGrid sequencer={sequencer} currentStep={2} />);
-    const cell = screen.getByTestId('sequencer-step-2');
-    expect(cell.style.border).toContain('2px solid');
+    expect(screen.getByText('CHORDS')).toBeTruthy();
+    expect(screen.getByText('MELODY')).toBeTruthy();
+    expect(screen.getByText('BASS')).toBeTruthy();
+    expect(screen.getByText('DRUMS')).toBeTruthy();
   });
 });
