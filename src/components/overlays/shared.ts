@@ -1,15 +1,24 @@
 // src/components/overlays/shared.ts
 // Shared style helpers for overlay panels (Task 12).
 import type { CSSProperties } from 'react';
+import { CYBER } from '@/theme';
 
-export const sectionLabelStyle: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: '#667',
-  letterSpacing: 0.5,
-  marginBottom: 4,
-  textTransform: 'uppercase',
-};
+export function sectionLabelStyle(accent: string): CSSProperties {
+  let color = '#666';
+  if (accent === CYBER.primary) {
+    color = '#662222';
+  } else if (accent === CYBER.amber) {
+    color = '#665520';
+  }
+  return {
+    fontSize: 10,
+    fontWeight: 700,
+    color,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  };
+}
 
 export const sectionStyle: CSSProperties = {
   display: 'flex',
@@ -25,14 +34,29 @@ export const rowStyle: CSSProperties = {
 };
 
 export function chipStyle(active: boolean, accent: string): CSSProperties {
+  let color = '#888';
+  let boxShadow = 'none';
+  if (active) {
+    if (accent === CYBER.primary) {
+      color = '#fff';
+      boxShadow = '0 0 10px ' + CYBER.primaryGlow;
+    } else if (accent === CYBER.amber) {
+      color = '#000';
+      boxShadow = '0 0 8px ' + CYBER.amberGlow;
+    } else {
+      color = '#000';
+      boxShadow = '0 0 8px ' + CYBER.secondaryGlow;
+    }
+  }
   return {
     minWidth: 32,
     minHeight: 32,
     padding: '6px 10px',
-    borderRadius: 6,
+    borderRadius: 4,
     border: 'none',
-    background: active ? accent : '#0f1626',
-    color: active ? '#111' : '#cdd',
+    background: active ? accent : '#1a1a1a',
+    color,
+    boxShadow,
     fontSize: 11,
     fontWeight: 700,
     cursor: 'pointer',

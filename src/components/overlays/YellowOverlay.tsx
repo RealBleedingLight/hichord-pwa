@@ -7,8 +7,9 @@ import type { BassMode, JoystickMode } from '@/music/types';
 import {
   sectionLabelStyle, sectionStyle, rowStyle, chipStyle, toggleRowStyle, sliderStyle,
 } from './shared';
+import { CYBER } from '@/theme';
 
-const ACCENT = '#f0c040';
+const ACCENT = CYBER.amber;
 
 const SYNTH_MODES: { value: SynthMode; label: string }[] = [
   { value: 'analog', label: 'ANALOG' },
@@ -75,7 +76,7 @@ export function YellowOverlay() {
   return (
     <div>
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Instrument</div>
+        <div style={sectionLabelStyle(ACCENT)}>Instrument</div>
         <div style={rowStyle}>
           {SYNTH_MODES.map((m) => (
             <button key={m.value} style={chipStyle(synthMode === m.value, ACCENT)} onClick={() => setSynthMode(m.value)}>
@@ -87,7 +88,7 @@ export function YellowOverlay() {
 
       {synthMode === 'analog' && (
         <div style={sectionStyle}>
-          <div style={sectionLabelStyle}>Waveform</div>
+          <div style={sectionLabelStyle(ACCENT)}>Waveform</div>
           <div style={rowStyle}>
             {WAVEFORMS.map((w) => (
               <button key={w.value} style={chipStyle(waveform === w.value, ACCENT)} onClick={() => setWaveform(w.value)}>
@@ -100,7 +101,7 @@ export function YellowOverlay() {
 
       {synthMode === 'fm' && (
         <div style={sectionStyle}>
-          <div style={sectionLabelStyle}>FM Preset</div>
+          <div style={sectionLabelStyle(ACCENT)}>FM Preset</div>
           <div style={rowStyle}>
             {FM_PRESETS.map((p, i) => (
               <button key={p.name} style={chipStyle(fmPresetIndex === i, ACCENT)} onClick={() => setFmPresetIndex(i)}>
@@ -112,7 +113,7 @@ export function YellowOverlay() {
       )}
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Effects</div>
+        <div style={sectionLabelStyle(ACCENT)}>Effects</div>
         {EFFECT_ORDER.map((type) => {
           const meta = EFFECT_META[type];
           const state = effects[type];
@@ -143,7 +144,7 @@ export function YellowOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Envelope (ADSR)</div>
+        <div style={sectionLabelStyle(ACCENT)}>Envelope (ADSR)</div>
         <div style={rowStyle}>
           {ADSR_PRESET_NAMES.map((name) => (
             <button
@@ -188,7 +189,7 @@ export function YellowOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Bass Mode</div>
+        <div style={sectionLabelStyle(ACCENT)}>Bass Mode</div>
         <div style={rowStyle}>
           {BASS_MODES.map((m) => (
             <button key={m.value} style={chipStyle(bassMode === m.value, ACCENT)} onClick={() => setBassMode(m.value)}>
@@ -199,14 +200,14 @@ export function YellowOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Voice Leading</div>
+        <div style={sectionLabelStyle(ACCENT)}>Voice Leading</div>
         <button style={chipStyle(voiceLeading, ACCENT)} onClick={() => setVoiceLeading(!voiceLeading)}>
           {voiceLeading ? 'ON' : 'OFF'}
         </button>
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Joystick Mode</div>
+        <div style={sectionLabelStyle(ACCENT)}>Joystick Mode</div>
         <div style={rowStyle}>
           {JOYSTICK_MODES.map((m) => (
             <button key={m.value} style={chipStyle(joystickMode === m.value, ACCENT)} onClick={() => setJoystickMode(m.value)}>

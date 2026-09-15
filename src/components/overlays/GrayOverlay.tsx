@@ -3,6 +3,7 @@ import { useAppStore } from '@/store';
 import { ALL_KEYS } from '@/music/types';
 import type { ScaleName } from '@/music/types';
 import { sectionLabelStyle, sectionStyle, rowStyle, chipStyle, stepperButtonStyle } from './shared';
+import { CYBER } from '@/theme';
 
 const SCALES: { value: ScaleName; label: string }[] = [
   { value: 'major', label: 'Major' },
@@ -17,7 +18,7 @@ const SCALES: { value: ScaleName; label: string }[] = [
   { value: 'lydian', label: 'Lydian' },
 ];
 
-const ACCENT = '#aaaaaa';
+const ACCENT = CYBER.secondary;
 
 export function GrayOverlay() {
   const key = useAppStore((s) => s.key);
@@ -32,7 +33,7 @@ export function GrayOverlay() {
   return (
     <div>
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Key</div>
+        <div style={sectionLabelStyle(ACCENT)}>Key</div>
         <div style={rowStyle}>
           {ALL_KEYS.map((k) => (
             <button key={k} style={chipStyle(key === k, ACCENT)} onClick={() => setKey(k)}>
@@ -43,7 +44,7 @@ export function GrayOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Octave</div>
+        <div style={sectionLabelStyle(ACCENT)}>Octave</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             style={stepperButtonStyle()}
@@ -64,7 +65,7 @@ export function GrayOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Scale</div>
+        <div style={sectionLabelStyle(ACCENT)}>Scale</div>
         <select
           value={scale}
           onChange={(e) => setScale(e.target.value as ScaleName)}
@@ -85,7 +86,7 @@ export function GrayOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Per-button octave shift</div>
+        <div style={sectionLabelStyle(ACCENT)}>Per-button octave shift</div>
         <div style={rowStyle}>
           {buttonOctaves.map((oct, i) => (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>

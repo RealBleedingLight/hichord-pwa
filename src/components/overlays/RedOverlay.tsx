@@ -3,8 +3,9 @@ import { useRef } from 'react';
 import { useAppStore } from '@/store';
 import type { PlayMode, StrumSpeed, ArpPattern, ArpRate, ArpChordMode, DrumKitName } from '@/audio/types';
 import { sectionLabelStyle, sectionStyle, rowStyle, chipStyle, sliderStyle } from './shared';
+import { CYBER } from '@/theme';
 
-const ACCENT = '#e04040';
+const ACCENT = CYBER.primary;
 
 const PLAY_MODES: { value: PlayMode; label: string }[] = [
   { value: 'play', label: 'PLAY' },
@@ -83,7 +84,7 @@ export function RedOverlay() {
   return (
     <div>
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Mode</div>
+        <div style={sectionLabelStyle(ACCENT)}>Mode</div>
         <div style={rowStyle}>
           {PLAY_MODES.map((m) => (
             <button key={m.value} style={chipStyle(playMode === m.value, ACCENT)} onClick={() => setPlayMode(m.value)}>
@@ -94,7 +95,7 @@ export function RedOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Tempo</div>
+        <div style={sectionLabelStyle(ACCENT)}>Tempo</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="range"
@@ -113,7 +114,7 @@ export function RedOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Strum Speed</div>
+        <div style={sectionLabelStyle(ACCENT)}>Strum Speed</div>
         <div style={rowStyle}>
           {STRUM_SPEEDS.map((s) => (
             <button key={s.value} style={chipStyle(strumSpeed === s.value, ACCENT)} onClick={() => setStrumSpeed(s.value)}>
@@ -124,7 +125,7 @@ export function RedOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Arp Pattern</div>
+        <div style={sectionLabelStyle(ACCENT)}>Arp Pattern</div>
         <div style={rowStyle}>
           {ARP_PATTERNS.map((p) => (
             <button key={p.value} style={chipStyle(arpPattern === p.value, ACCENT)} onClick={() => setArpPattern(p.value)}>
@@ -135,7 +136,7 @@ export function RedOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Arp Rate</div>
+        <div style={sectionLabelStyle(ACCENT)}>Arp Rate</div>
         <div style={rowStyle}>
           {ARP_RATES.map((r) => (
             <button key={r} style={chipStyle(arpRate === r, ACCENT)} onClick={() => setArpRate(r)}>
@@ -146,7 +147,7 @@ export function RedOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Arp Chord Mode</div>
+        <div style={sectionLabelStyle(ACCENT)}>Arp Chord Mode</div>
         <div style={rowStyle}>
           {ARP_CHORD_MODES.map((m) => (
             <button key={m.value} style={chipStyle(arpChordMode === m.value, ACCENT)} onClick={() => setArpChordMode(m.value)}>
@@ -157,7 +158,7 @@ export function RedOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Drum Kit</div>
+        <div style={sectionLabelStyle(ACCENT)}>Drum Kit</div>
         <div style={rowStyle}>
           {DRUM_KITS.map((k) => (
             <button key={k} style={chipStyle(drumKit === k, ACCENT)} onClick={() => setDrumKit(k)}>
