@@ -1,6 +1,7 @@
 // src/components/PianoKeys.tsx
 import { useRef, useEffect, useCallback } from 'react';
 import type { ScaleDegree } from '@/music/types';
+import { CYBER } from '@/theme';
 
 interface PianoKeysProps {
   onKeyDown: (degree: ScaleDegree) => void;
@@ -56,15 +57,17 @@ export function PianoKeys({ onKeyDown, onKeyUp, activeKeys, labels }: PianoKeysP
             data-degree={degree}
             style={{
               flex: 1,
-              background: activeKeys.has(degree) ? '#4a9eff' : '#e8e8e8',
-              borderRadius: '0 0 8px 8px',
+              background: activeKeys.has(degree) ? 'linear-gradient(180deg, #ff1744, #cc1133)' : 'linear-gradient(180deg, #2a0505, #1a0000)',
+              border: '1px solid ' + CYBER.borderBright,
+              borderRadius: 8,
+              boxShadow: activeKeys.has(degree) ? '0 0 15px rgba(255,23,68,.6)' : 'none',
               display: 'flex',
               alignItems: 'flex-end',
               justifyContent: 'center',
               paddingBottom: 12,
               fontSize: 14,
               fontWeight: 600,
-              color: '#333',
+              color: activeKeys.has(degree) ? '#fff' : CYBER.textLight,
               cursor: 'pointer',
               touchAction: 'manipulation',
               transition: 'background 0.05s',
@@ -82,15 +85,17 @@ export function PianoKeys({ onKeyDown, onKeyUp, activeKeys, labels }: PianoKeysP
             data-degree={degree}
             style={{
               width: '28%',
-              background: activeKeys.has(degree) ? '#3a7bcc' : '#333',
-              borderRadius: '0 0 6px 6px',
+              background: activeKeys.has(degree) ? 'linear-gradient(180deg, #ff1744, #cc1133)' : 'linear-gradient(180deg, #2a0505, #1a0000)',
+              border: '1px solid ' + CYBER.border,
+              borderRadius: 6,
+              boxShadow: activeKeys.has(degree) ? '0 0 15px rgba(255,23,68,.6)' : 'none',
               display: 'flex',
               alignItems: 'flex-end',
               justifyContent: 'center',
               paddingBottom: 8,
               fontSize: 12,
               fontWeight: 600,
-              color: '#ccc',
+              color: activeKeys.has(degree) ? '#fff' : CYBER.textDim,
               cursor: 'pointer',
               touchAction: 'manipulation',
               zIndex: 2,

@@ -31,7 +31,9 @@ export type PlayMode =
 
 export type DrumKitName = 'tight' | 'x0x' | 'x9x' | 'lynn' | 'kr78' | 'trap' | 'user';
 
-export type DrumSound = 'kick' | 'altKick' | 'snare' | 'closedHH' | 'tom' | 'bellRide' | 'openHH';
+export type DrumSound = 'kick' | 'altKick' | 'snare' | 'closedHH' | 'tom' | 'bellRide' | 'openHH'
+  | 'clap' | 'rim' | 'tomHigh' | 'tomLow' | 'perc' | 'crash' | 'ride' | 'shaker'
+  | 'fx1' | 'fx2' | 'fx3' | 'fx4';
 
 export type ArpPattern = 'up' | 'down' | 'upDown' | 'downUp' | 'random' | 'fingerpick';
 

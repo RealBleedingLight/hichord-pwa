@@ -4,9 +4,10 @@ import { useAppStore } from '@/store';
 import type { ScaleDegree, ChordVoicing } from '@/music/types';
 import { SCALE_DEGREES } from '@/music/types';
 import { ChordHiroGame, type ChordHiroSnapshot } from './chordHiroGame';
+import { CYBER } from '@/theme';
 
-const ACCENT = '#4a9eff';
-const BG = '#16213e';
+const ACCENT = CYBER.primary;
+const BG = CYBER.panel;
 
 export interface ChordHiroProps {
   onChordTrigger?: (voicing: ChordVoicing) => void;

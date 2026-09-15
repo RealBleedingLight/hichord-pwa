@@ -1,6 +1,28 @@
 import type { DrumKitName, DrumSound } from './types';
 
-const DRUM_SOUNDS: DrumSound[] = ['kick', 'altKick', 'snare', 'closedHH', 'tom', 'bellRide', 'openHH'];
+const BASE_DRUM_SOUNDS: DrumSound[] = ['kick', 'altKick', 'snare', 'closedHH', 'tom', 'bellRide', 'openHH'];
+
+/** New sounds map to closest existing audio for synthesis fallback. */
+const SOUND_FALLBACK: Partial<Record<DrumSound, DrumSound>> = {
+  clap: 'snare',
+  rim: 'closedHH',
+  tomHigh: 'tom',
+  tomLow: 'tom',
+  perc: 'bellRide',
+  crash: 'bellRide',
+  ride: 'bellRide',
+  shaker: 'closedHH',
+  fx1: 'kick',
+  fx2: 'snare',
+  fx3: 'openHH',
+  fx4: 'tom',
+};
+
+const DRUM_SOUNDS: DrumSound[] = [
+  ...BASE_DRUM_SOUNDS,
+  'clap', 'rim', 'tomHigh', 'tomLow', 'perc', 'crash', 'ride', 'shaker',
+  'fx1', 'fx2', 'fx3', 'fx4',
+];
 
 export class DrumEngine {
   private ctx: BaseAudioContext;
@@ -23,6 +45,12 @@ export class DrumEngine {
   }
 
   generateSynthDrum(sound: DrumSound): AudioBuffer {
+    // For expanded sounds, delegate to the base sound they fall back to
+    const resolved = SOUND_FALLBACK[sound] ?? sound;
+    return this.generateBaseDrum(resolved);
+  }
+
+  private generateBaseDrum(sound: DrumSound): AudioBuffer {
     const sampleRate = this.ctx.sampleRate;
     const length = Math.floor(sampleRate * 0.5);
     const buffer = this.ctx.createBuffer(1, length, sampleRate);
@@ -81,6 +109,9 @@ export class DrumEngine {
         }
         break;
       }
+      default:
+        // Any unrecognized base sound falls through silently (empty buffer)
+        break;
     }
     return buffer;
   }

@@ -1,5 +1,8 @@
 // src/components/InfoBar.tsx
 import { useAppStore } from '@/store';
+import { CYBER } from '@/theme';
+
+const METER_HEIGHTS = [40, 60, 80, 50, 30];
 
 export function InfoBar() {
   const key = useAppStore((s) => s.key);
@@ -14,13 +17,25 @@ export function InfoBar() {
       alignItems: 'center',
       gap: 16,
       fontSize: 13,
-      fontFamily: 'monospace',
-      color: '#8af',
+      fontFamily: CYBER.fontMono,
     }}>
-      <span>{key} {scale}</span>
-      <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{chordName || '—'}</span>
-      <span>{playMode}</span>
-      <span>BPM:{bpm}</span>
+      <span style={{ color: CYBER.secondary, fontSize: 12, fontWeight: 600 }}>{key} {scale}</span>
+      <span style={{ fontFamily: CYBER.fontDisplay, fontWeight: 700, color: CYBER.textLight, fontSize: 16 }}>{chordName || '—'}</span>
+      <span style={{ color: CYBER.primary, fontSize: 10 }}>{playMode}</span>
+      <span style={{ color: CYBER.textDim, fontSize: 10 }}>BPM:{bpm}</span>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 14 }}>
+        {METER_HEIGHTS.map((h, i) => (
+          <div
+            key={i}
+            style={{
+              width: 3,
+              height: `${h}%`,
+              background: i < 3 ? CYBER.primary : '#220000',
+              boxShadow: i < 3 ? '0 0 6px ' + CYBER.primaryGlow : 'none',
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }

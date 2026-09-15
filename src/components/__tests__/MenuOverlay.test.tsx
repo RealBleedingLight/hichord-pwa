@@ -87,7 +87,7 @@ describe('MenuOverlay', () => {
   it('clicking a play mode in RedOverlay updates the store', () => {
     useAppStore.setState({ activeOverlay: 'red' });
     render(<MenuOverlay />);
-    fireEvent.click(screen.getByText('ARPEGGIO'));
+    fireEvent.click(screen.getByText('ARP'));
     expect(useAppStore.getState().playMode).toBe('arpeggio');
   });
 

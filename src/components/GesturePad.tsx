@@ -1,6 +1,7 @@
 // src/components/GesturePad.tsx
 import { useRef, useEffect, useState } from 'react';
 import type { JoystickDirection } from '@/music/types';
+import { CYBER } from '@/theme';
 
 interface GesturePadProps {
   onDirectionChange: (dir: JoystickDirection) => void;
@@ -93,20 +94,23 @@ export function GesturePad({ onDirectionChange, onCenterTap, currentLabel }: Ges
         position: 'relative',
         width: '100%',
         height: '100%',
-        background: '#16213e',
-        borderRadius: 12,
-        border: '2px solid #2a3a5c',
+        background: CYBER.panel,
+        borderRadius: 8,
+        border: '1px solid ' + CYBER.border,
         overflow: 'hidden',
         touchAction: 'none',
       }}
     >
-      {/* Direction zone lines */}
-      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.15 }}>
-        <line x1="50%" y1="0" x2="50%" y2="100%" stroke="#4a9eff" />
-        <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#4a9eff" />
-        <line x1="0" y1="0" x2="100%" y2="100%" stroke="#4a9eff" />
-        <line x1="100%" y1="0" x2="0" y2="100%" stroke="#4a9eff" />
+      {/* Direction zone crosshair */}
+      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.08 }}>
+        <line x1="50%" y1="0" x2="50%" y2="100%" stroke={CYBER.primary} strokeWidth={0.5} />
+        <line x1="0" y1="50%" x2="100%" y2="50%" stroke={CYBER.primary} strokeWidth={0.5} />
       </svg>
+      {/* Direction labels */}
+      <div style={{ position: 'absolute', top: 4, left: 0, right: 0, textAlign: 'center', fontSize: 8, color: 'rgba(255,23,68,.4)' }}>m</div>
+      <div style={{ position: 'absolute', bottom: 20, left: 0, right: 0, textAlign: 'center', fontSize: 8, color: 'rgba(255,23,68,.4)' }}>sus4</div>
+      <div style={{ position: 'absolute', top: '50%', left: 4, transform: 'translateY(-50%)', fontSize: 8, color: 'rgba(255,23,68,.4)' }}>dim</div>
+      <div style={{ position: 'absolute', top: '50%', right: 4, transform: 'translateY(-50%)', fontSize: 8, color: 'rgba(255,23,68,.4)' }}>aug</div>
       {/* Thumb dot */}
       <div
         style={{
@@ -117,9 +121,10 @@ export function GesturePad({ onDirectionChange, onCenterTap, currentLabel }: Ges
           width: active ? 40 : 24,
           height: active ? 40 : 24,
           borderRadius: '50%',
-          background: active ? '#4a9eff' : '#3a5a8c',
+          background: 'transparent',
+          border: '2px solid ' + CYBER.primary,
           transition: active ? 'none' : 'all 0.15s ease-out',
-          boxShadow: active ? '0 0 20px rgba(74,158,255,0.5)' : 'none',
+          boxShadow: '0 0 12px ' + CYBER.primaryGlow + ', inset 0 0 6px rgba(255,23,68,.2)',
         }}
       />
       {/* Label */}
@@ -129,9 +134,10 @@ export function GesturePad({ onDirectionChange, onCenterTap, currentLabel }: Ges
         left: 0,
         right: 0,
         textAlign: 'center',
-        fontSize: 13,
-        color: '#4a9eff',
+        fontSize: 10,
+        color: CYBER.primary,
         fontWeight: 600,
+        letterSpacing: 2,
       }}>
         {currentLabel || 'DEFAULT'}
       </div>

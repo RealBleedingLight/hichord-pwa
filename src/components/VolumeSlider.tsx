@@ -1,5 +1,6 @@
 // src/components/VolumeSlider.tsx
 import { useRef, useEffect } from 'react';
+import { CYBER } from '@/theme';
 
 interface VolumeSliderProps {
   value: number;
@@ -15,8 +16,8 @@ export function VolumeSlider({ value, onChange }: VolumeSliderProps) {
 
     const update = (e: PointerEvent) => {
       const rect = el.getBoundingClientRect();
-      const pct = 1 - (e.clientY - rect.top) / rect.height;
-      onChange(Math.max(0, Math.min(1, pct)));
+      const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      onChange(x);
     };
 
     let dragging = false;
@@ -37,22 +38,34 @@ export function VolumeSlider({ value, onChange }: VolumeSliderProps) {
   return (
     <div ref={sliderRef} style={{
       width: '100%',
-      height: 30,
-      background: '#16213e',
+      height: 18,
+      background: CYBER.panel,
+      border: '1px solid ' + CYBER.border,
       borderRadius: 4,
       position: 'relative',
+      overflow: 'hidden',
       cursor: 'pointer',
       touchAction: 'none',
     }}>
       <div style={{
         position: 'absolute',
-        bottom: 0,
         left: 0,
-        right: 0,
-        height: `${value * 100}%`,
-        background: '#4a9eff',
-        borderRadius: 4,
-        transition: 'height 0.05s',
+        top: 0,
+        bottom: 0,
+        width: `${value * 100}%`,
+        background: 'linear-gradient(90deg, #ff1744, #e04040)',
+        borderRadius: 3,
+      }} />
+      <div style={{
+        position: 'absolute',
+        left: `${value * 100}%`,
+        top: '50%',
+        transform: 'translate(-50%,-50%)',
+        width: 8,
+        height: 14,
+        background: CYBER.secondary,
+        borderRadius: 2,
+        boxShadow: '0 0 8px ' + CYBER.secondaryGlow,
       }} />
     </div>
   );
