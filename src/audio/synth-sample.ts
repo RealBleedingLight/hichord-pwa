@@ -1,21 +1,18 @@
 import type { Note } from '@/music/types';
 import type { ADSREnvelope } from './types';
-
-interface SampleVoice {
-  source: AudioBufferSourceNode;
-  envGain: GainNode;
-  panner: StereoPannerNode;
-}
+import { applyAttack, voiceLevel } from './envelope';
+import { VoiceSet } from './voice-set';
 
 export class SampleSynth {
   private ctx: BaseAudioContext;
   private output: AudioNode;
-  private activeVoices: SampleVoice[] = [];
+  private voices: VoiceSet;
   private sampleCache: Map<string, AudioBuffer> = new Map();
 
   constructor(ctx: BaseAudioContext, output: AudioNode) {
     this.ctx = ctx;
     this.output = output;
+    this.voices = new VoiceSet(ctx);
   }
 
   async loadSample(url: string): Promise<AudioBuffer> {
@@ -32,57 +29,45 @@ export class SampleSynth {
     this.sampleCache.set(name, buffer);
   }
 
-  trigger(notes: Note[], adsr: ADSREnvelope, sampleBuffer: AudioBuffer): void {
-    this.stop();
-    const now = this.ctx.currentTime;
-    const attackEnd = now + adsr.attack / 1000;
-    const decayEnd = attackEnd + adsr.decay / 1000;
-    const baseMidi = 60; // assume samples recorded at C4
+  /**
+   * Plays `sampleBuffer` once per note, pitch-shifted from `rootMidi` (the
+   * pitch the sample was recorded at) to each note.
+   */
+  trigger(notes: Note[], adsr: ADSREnvelope, sampleBuffer: AudioBuffer, when?: number, rootMidi = 60, spread = 0): void {
+    const now = Math.max(when ?? 0, this.ctx.currentTime);
+    this.voices.cut(now);
+    const count = Math.min(notes.length, 6);
+    // Samples are normalised mono, so give them the same headroom as two oscillators.
+    const level = voiceLevel(count) * 2;
 
-    for (let i = 0; i < Math.min(notes.length, 6); i++) {
+    for (let i = 0; i < count; i++) {
       const note = notes[i];
-      if (!note) continue;
-      const pan = notes.length > 1 ? -0.5 + (i / (notes.length - 1)) : 0;
+      if (!note || !Number.isFinite(note.midi)) continue;
+      const start = now + i * spread;
+      const pan = count > 1 ? -0.5 + (i / (count - 1)) : 0;
 
       const source = this.ctx.createBufferSource();
       source.buffer = sampleBuffer;
-      source.playbackRate.value = Math.pow(2, (note.midi - baseMidi) / 12);
+      source.playbackRate.value = Math.pow(2, (note.midi - rootMidi) / 12);
 
       const envGain = this.ctx.createGain();
-      envGain.gain.setValueAtTime(0, now);
-      envGain.gain.linearRampToValueAtTime(1, attackEnd);
-      envGain.gain.linearRampToValueAtTime(adsr.sustain, decayEnd);
+      applyAttack(envGain.gain, adsr, start, level);
 
       const panner = this.ctx.createStereoPanner();
       panner.pan.value = Math.max(-1, Math.min(1, pan));
 
       source.connect(envGain).connect(panner).connect(this.output);
-      source.start(now);
+      source.start(start);
 
-      this.activeVoices.push({ source, envGain, panner });
+      this.voices.add({ gains: [envGain.gain], sources: [source] });
     }
   }
 
-  release(adsr: ADSREnvelope): void {
-    const now = this.ctx.currentTime;
-    const releaseEnd = now + adsr.release / 1000;
-    for (const voice of this.activeVoices) {
-      voice.envGain.gain.cancelScheduledValues(now);
-      voice.envGain.gain.setValueAtTime(voice.envGain.gain.value, now);
-      voice.envGain.gain.linearRampToValueAtTime(0, releaseEnd);
-      voice.source.stop(releaseEnd + 0.01);
-    }
-    setTimeout(() => { this.activeVoices = []; }, adsr.release + 50);
+  release(adsr: ADSREnvelope, when?: number): void {
+    this.voices.release(adsr.release, Math.max(when ?? 0, this.ctx.currentTime));
   }
 
-  stop(): void {
-    const now = this.ctx.currentTime;
-    for (const voice of this.activeVoices) {
-      try {
-        voice.envGain.gain.setValueAtTime(0, now);
-        voice.source.stop(now + 0.005);
-      } catch { /* already stopped */ }
-    }
-    this.activeVoices = [];
+  stop(when?: number): void {
+    this.voices.cut(Math.max(when ?? 0, this.ctx.currentTime));
   }
 }

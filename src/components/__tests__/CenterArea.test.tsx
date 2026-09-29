@@ -3,13 +3,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CenterArea, type CenterAreaProps } from '@/components/CenterArea';
 import { useAppStore } from '@/store';
-import { Sequencer } from '@/audio/sequencer';
 
 function baseProps(): CenterAreaProps {
   return {
     drumViewProps: { onTriggerDrum: vi.fn() },
     looperViewProps: { onRecordToggle: vi.fn(), onStop: vi.fn(), onPlayToggle: vi.fn() },
-    sequencerGridProps: { sequencer: new Sequencer() },
+    sequencerGridProps: {},
   };
 }
 
@@ -48,10 +47,17 @@ describe('CenterArea', () => {
     expect(screen.getByTestId('sequencer-step-0')).toBeTruthy();
   });
 
-  it('shows default waveform display for other modes', () => {
-    useAppStore.setState({ playMode: 'play', synthMode: 'analog' });
+  it('shows the chord display (with first-run hint) for playing modes', () => {
+    useAppStore.setState({ playMode: 'play', synthMode: 'analog', currentChordName: '' });
     render(<CenterArea {...baseProps()} />);
-    expect(screen.getByText('ANALOG')).toBeTruthy();
+    expect(screen.getByTestId('chord-display')).toBeTruthy();
+    expect(screen.getByText('chord key')).toBeTruthy();
+  });
+
+  it('shows the last chord played', () => {
+    useAppStore.setState({ playMode: 'strum', currentChordName: 'Am7', currentChordMidi: [57, 60, 64, 67] });
+    render(<CenterArea {...baseProps()} />);
+    expect(screen.getByText('Am7')).toBeTruthy();
   });
 
   it('routes to Tuner for tuner mode', () => {

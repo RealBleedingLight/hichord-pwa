@@ -5,7 +5,12 @@ import { CYBER } from '@/theme';
 
 const ACCENT = CYBER.primary;
 
-export function MicSampleView() {
+export interface MicSampleViewProps {
+  /** Receives the captured take (and its detected pitch) so it can be played from the chord keys. */
+  onSampleCaptured?: (buffer: AudioBuffer, pitchHz: number | null) => void;
+}
+
+export function MicSampleView({ onSampleCaptured }: MicSampleViewProps = {}) {
   const samplerRef = useRef<MicSampler | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const [recording, setRecording] = useState(false);
@@ -34,18 +39,22 @@ export function MicSampleView() {
 
       setRecording(true);
       setStatus('Recording... tap again to stop');
+      // Cap takes at 3 seconds, like the hardware.
+      const autoStop = setTimeout(() => sampler.stop(), 3000);
 
       const buffer = await sampler.recordFromStream(stream);
-      setStatus(`Captured ${buffer.duration.toFixed(2)}s sample`);
+      clearTimeout(autoStop);
+      setStatus(`Captured ${buffer.duration.toFixed(2)}s — now play the chord keys`);
       const detected = sampler.getDetectedPitch();
       setPitch(detected > 0 ? detected : null);
       setRecording(false);
+      onSampleCaptured?.(buffer, detected > 0 ? detected : null);
     } catch {
       setError('Microphone access denied');
       setRecording(false);
       setStatus('Ready to record a sample');
     }
-  }, []);
+  }, [onSampleCaptured]);
 
   const stopRecording = useCallback(() => {
     samplerRef.current?.stop();
@@ -72,6 +81,10 @@ export function MicSampleView() {
     }}>
       <div data-testid="mic-sample-status" style={{ fontSize: 14, color: '#889', textAlign: 'center' }}>
         {status}
+      </div>
+
+      <div style={{ fontSize: 12, color: CYBER.textDim, textAlign: 'center', maxWidth: 320, lineHeight: 1.4 }}>
+        Sing, hum or play one steady note (up to 3 s). It becomes an instrument you can play chords with.
       </div>
 
       {pitch !== null && (

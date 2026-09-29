@@ -54,12 +54,17 @@ export class MasterClock {
     };
   }
 
-  start(): void {
+  /**
+   * Starts ticking. `startAt` (AudioContext time) and `startStep` let callers
+   * line the first tick up with an existing bar grid (e.g. a running loop).
+   */
+  start(startAt?: number, startStep = 0): void {
     if (this.running || !this.ctx) return;
     this.running = true;
-    this.step = 0;
-    this.nextStepTime = this.ctx.currentTime;
+    this.step = startStep;
+    this.nextStepTime = Math.max(startAt ?? 0, this.ctx.currentTime);
     this.intervalId = setInterval(() => this.schedule(), this.scheduleInterval);
+    this.schedule();
   }
 
   stop(): void {
@@ -72,6 +77,8 @@ export class MasterClock {
   }
 
   isRunning(): boolean { return this.running; }
+
+  getCurrentStep(): number { return this.step; }
 
   private schedule(): void {
     if (!this.ctx || !this.running) return;

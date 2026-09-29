@@ -1,190 +1,129 @@
-import { useState } from 'react';
-import type { Sequencer } from '@/audio/sequencer';
-import type { ScaleDegree } from '@/music/types';
+// src/components/SequencerGrid.tsx
+import { useMemo } from 'react';
+import { useAppStore, SEQUENCE_SLOTS, STEPS_PER_SLOT } from '@/store';
+import { getChord } from '@/music/chord-engine';
 import { CYBER } from '@/theme';
 
-const DEGREE_NAMES = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'] as const;
-
-const TRACK_COLORS = [
-  { name: 'CHORDS', color: CYBER.secondary, glow: CYBER.secondaryGlow, height: 44 },
-  { name: 'MELODY', color: CYBER.secondary, glow: CYBER.secondaryGlow, height: 38 },
-  { name: 'BASS', color: CYBER.primary, glow: CYBER.primaryGlow, height: 38 },
-  { name: 'DRUMS', color: CYBER.amber, glow: CYBER.amberGlow, height: 38 },
-] as const;
-
-const BAR_COLORS = [
-  { bg: 'linear-gradient(135deg, #00344a, #002233)', border: CYBER.secondary, glow: CYBER.secondaryGlow },
-  { bg: 'linear-gradient(135deg, #1a0808, #120000)', border: CYBER.primary, glow: CYBER.primaryGlow },
-  { bg: 'linear-gradient(135deg, #1a1500, #120e00)', border: CYBER.amber, glow: CYBER.amberGlow },
-  { bg: 'linear-gradient(135deg, #0a1a0a, #051005)', border: '#4caf50', glow: 'rgba(76,175,80,.12)' },
-] as const;
-
 export interface SequencerGridProps {
-  sequencer: Sequencer;
-  currentStep?: number | null;
-  onStepsChange?: () => void;
+  onToggleTransport?: () => void;
 }
 
-export function SequencerGrid({ sequencer, currentStep = null, onStepsChange }: SequencerGridProps) {
-  const [, forceRender] = useState(0);
-  const [auxTracks, setAuxTracks] = useState<boolean[][]>(() =>
-    Array.from({ length: 3 }, () => Array.from({ length: 16 }, () => false))
-  );
-  const steps = sequencer.getSteps();
+const SLOT_COLORS = [CYBER.secondary, CYBER.primary, CYBER.amber, '#4caf50'];
 
-  const handleChordTap = (index: number) => {
-    const step = sequencer.getStep(index);
-    if (!step) {
-      sequencer.setStep(index, 1, 'center');
-    } else if (step.degree < 7) {
-      sequencer.setStep(index, (step.degree + 1) as ScaleDegree, step.direction, step.durationSteps);
-    } else {
-      sequencer.removeStep(index);
+/**
+ * Chord progression editor: 4 bars split into 8 half-bar slots.
+ *
+ * Workflow: tap a slot (it glows), then press a chord key — the chord (with
+ * whatever the pad is doing) is written there and the next slot is selected,
+ * so a whole progression is just "tap slot 1, play 4–8 chords". Empty slots
+ * hold the previous chord. The progression plays with ▶ alongside the beat.
+ */
+export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
+  const sequence = useAppStore((s) => s.sequence);
+  const selectedSlot = useAppStore((s) => s.selectedSlot);
+  const setSelectedSlot = useAppStore((s) => s.setSelectedSlot);
+  const setSequenceSlot = useAppStore((s) => s.setSequenceSlot);
+  const clearSequence = useAppStore((s) => s.clearSequence);
+  const transportPlaying = useAppStore((s) => s.transportPlaying);
+  const transportStep = useAppStore((s) => s.transportStep);
+  const key = useAppStore((s) => s.key);
+  const scale = useAppStore((s) => s.scale);
+  const joystickMode = useAppStore((s) => s.joystickMode);
+  const chordLocks = useAppStore((s) => s.chordLocks);
+
+  const names = useMemo(() => sequence.map((slot) => slot
+    ? getChord(key, scale, slot.degree, 4, slot.direction, joystickMode, 0, 'off', chordLocks).displayName
+    : null), [sequence, key, scale, joystickMode, chordLocks]);
+
+  const playingSlot = transportPlaying && transportStep !== null ? Math.floor(transportStep / STEPS_PER_SLOT) % SEQUENCE_SLOTS : null;
+  const hasAny = sequence.some(Boolean);
+
+  // An empty slot "holds" the last filled slot before it (wrapping round).
+  const heldFrom = (i: number): number | null => {
+    for (let k = 0; k < SEQUENCE_SLOTS; k++) {
+      const j = (i - k + SEQUENCE_SLOTS) % SEQUENCE_SLOTS;
+      if (sequence[j]) return j;
     }
-    forceRender((n) => n + 1);
-    onStepsChange?.();
+    return null;
   };
 
-  const toggleAux = (trackIdx: number, stepIdx: number) => {
-    setAuxTracks((prev) => {
-      const next = prev.map((row) => [...row]);
-      const track = next[trackIdx];
-      if (track) {
-        track[stepIdx] = !track[stepIdx];
-      }
-      return next;
-    });
-  };
-
-  const gridCols = '60px repeat(16, 1fr)';
+  const btn = (active: boolean, color: string): React.CSSProperties => ({
+    height: 34, padding: '0 12px', borderRadius: 6,
+    background: active ? color : '#1a0808',
+    color: active ? '#000' : CYBER.textMid,
+    border: '1px solid ' + (active ? color : CYBER.border),
+    fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', touchAction: 'manipulation',
+  });
 
   return (
-    <div style={{
+    <div data-testid="sequencer" style={{
       width: '100%', height: '100%',
       display: 'flex', flexDirection: 'column',
-      gap: 3, padding: 6, overflow: 'hidden',
+      gap: 8, padding: 8, overflow: 'hidden',
+      background: CYBER.panel, border: '1px solid ' + CYBER.border, borderRadius: 8,
       fontFamily: CYBER.fontMono,
     }}>
-      {/* Bar labels */}
-      <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 2, height: 14 }}>
-        <div />
-        {[1, 2, 3, 4].map((bar) => (
-          <div key={bar} style={{
-            gridColumn: 'span 4',
-            textAlign: 'center',
-            fontSize: 8,
-            color: CYBER.textDim,
-            borderBottom: '1px solid #220000',
-          }}>BAR {bar}</div>
-        ))}
+      <div style={{ fontSize: 12, color: CYBER.textDim, minHeight: 16 }}>
+        {selectedSlot !== null
+          ? <>Press a <b style={{ color: CYBER.secondary }}>chord key</b> to fill slot {selectedSlot + 1} · slide the pad while holding to colour it</>
+          : hasAny ? 'Tap a slot to change it. Empty slots hold the previous chord.' : 'Tap slot 1, then play chord keys to write a progression.'}
       </div>
 
-      {/* CHORDS track */}
-      <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 2, height: 44 }}>
-        <div style={{ display: 'flex', alignItems: 'center', fontSize: 8, color: CYBER.textMid }}>CHORDS</div>
-        {Array.from({ length: 4 }, (_, barIdx) => {
-          const startStep = barIdx * 4;
-          const step = steps[startStep];
-          const degree = step?.degree;
-          const chordLabel = degree != null ? DEGREE_NAMES[degree - 1] ?? '?' : '—';
-          const colors = BAR_COLORS[barIdx % BAR_COLORS.length]!;
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, fontSize: 10, color: CYBER.textDim, textAlign: 'center' }}>
+        {[1, 2, 3, 4].map((bar) => <div key={bar} style={{ borderBottom: '1px solid ' + CYBER.border }}>BAR {bar}</div>)}
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: `repeat(${SEQUENCE_SLOTS}, 1fr)`, gap: 4 }}>
+        {sequence.map((slot, i) => {
+          const color = SLOT_COLORS[Math.floor(i / 2) % SLOT_COLORS.length]!;
+          const selected = selectedSlot === i;
+          const playing = playingSlot === i;
+          const source = slot ? i : heldFrom(i);
           return (
             <button
-              key={barIdx}
-              data-testid={`sequencer-step-${startStep}`}
-              onClick={() => handleChordTap(startStep)}
+              key={i}
+              data-testid={`sequencer-step-${i}`}
+              onClick={() => setSelectedSlot(selected ? null : i)}
               style={{
-                gridColumn: 'span 4',
-                background: degree != null ? colors.bg : '#1a0808',
-                border: degree != null ? `1px solid ${colors.border}` : '1px solid ' + CYBER.border,
-                borderRadius: 4,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: degree != null ? `0 0 10px ${colors.glow}` : 'none',
-                cursor: 'pointer',
-                touchAction: 'manipulation',
+                position: 'relative',
+                minWidth: 0,
+                borderRadius: 6,
+                border: selected ? `2px solid ${CYBER.secondary}` : `1px solid ${slot ? color : CYBER.border}`,
+                background: slot ? `${color}22` : '#120404',
+                boxShadow: playing ? `0 0 14px ${color}` : selected ? '0 0 10px ' + CYBER.secondaryGlow : 'none',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+                cursor: 'pointer', touchAction: 'manipulation', padding: 2,
               }}
             >
               <span style={{
-                fontFamily: CYBER.fontDisplay,
-                fontSize: 14,
-                fontWeight: 700,
-                color: degree != null ? colors.border : CYBER.textDim,
-              }}>{chordLabel}</span>
+                fontFamily: CYBER.fontDisplay, fontWeight: 700,
+                fontSize: 'clamp(11px, 1.8vw, 16px)',
+                color: slot ? color : source !== null ? '#6a4a4a' : '#5a3a3a',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+              }}>
+                {slot ? names[i] : source !== null ? '···' : '—'}
+              </span>
+              {slot && (
+                <span
+                  role="button"
+                  aria-label={`Clear slot ${i + 1}`}
+                  onClick={(e) => { e.stopPropagation(); setSequenceSlot(i, null); }}
+                  style={{ fontSize: 11, color: CYBER.textDim, padding: '0 6px' }}
+                >✕</span>
+              )}
+              {playing && <span style={{ position: 'absolute', bottom: 2, left: 4, right: 4, height: 3, borderRadius: 2, background: color }} />}
             </button>
           );
         })}
       </div>
 
-      {/* Auxiliary tracks: MELODY, BASS, DRUMS */}
-      {TRACK_COLORS.slice(1).map((track, trackIdx) => {
-        const auxRow = auxTracks[trackIdx];
-        return (
-          <div key={track.name} style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 2, height: 38 }}>
-            <div style={{ display: 'flex', alignItems: 'center', fontSize: 8, color: CYBER.textMid }}>{track.name}</div>
-            {Array.from({ length: 16 }, (_, stepIdx) => {
-              const active = auxRow?.[stepIdx] ?? false;
-              return (
-                <button
-                  key={stepIdx}
-                  onClick={() => toggleAux(trackIdx, stepIdx)}
-                  style={{
-                    background: active ? track.color : CYBER.bg,
-                    borderRadius: 3,
-                    border: 'none',
-                    opacity: active ? 0.7 : 1,
-                    boxShadow: active ? `0 0 4px ${track.glow}` : 'none',
-                    cursor: 'pointer',
-                    touchAction: 'manipulation',
-                    padding: 0,
-                  }}
-                />
-              );
-            })}
-          </div>
-        );
-      })}
-
-      {/* Playhead */}
-      <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 2, height: 8 }}>
-        <div />
-        {Array.from({ length: 16 }, (_, i) => (
-          <div key={i} style={{
-            background: currentStep === i ? CYBER.primary : '#220000',
-            borderRadius: 2,
-            boxShadow: currentStep === i ? `0 0 8px ${CYBER.primaryGlow}` : 'none',
-          }} />
-        ))}
-      </div>
-
-      {/* Controls */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-        <div style={{ display: 'flex', gap: 3 }}>
-          <button style={{
-            padding: '3px 8px', borderRadius: 3,
-            background: CYBER.secondary, color: '#000',
-            fontSize: 8, fontWeight: 700, border: 'none',
-            cursor: 'pointer', touchAction: 'manipulation',
-          }}>LOOP</button>
-          <button style={{
-            padding: '3px 8px', borderRadius: 3,
-            background: '#1a0808', color: CYBER.textDim,
-            fontSize: 8, border: '1px solid ' + CYBER.border,
-            cursor: 'pointer', touchAction: 'manipulation',
-          }}>ONCE</button>
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', gap: 3 }}>
-          {['+ TRACK', 'QUANTIZE', 'EXPORT'].map((label) => (
-            <button key={label} style={{
-              padding: '3px 8px', borderRadius: 3,
-              background: '#1a0808', color: CYBER.textDim,
-              fontSize: 8, border: '1px solid ' + CYBER.border,
-              cursor: 'pointer', touchAction: 'manipulation',
-            }}>{label}</button>
-          ))}
-        </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <button data-testid="sequencer-play" onClick={onToggleTransport} style={btn(transportPlaying, CYBER.secondary)}>
+          {transportPlaying ? '■ STOP' : '▶ PLAY'}
+        </button>
+        <button onClick={() => setSelectedSlot(0)} style={btn(false, CYBER.secondary)}>WRITE FROM 1</button>
+        <span style={{ flex: 1 }} />
+        <button data-testid="sequencer-clear" onClick={clearSequence} style={btn(false, CYBER.primary)} disabled={!hasAny}>CLEAR</button>
       </div>
     </div>
   );

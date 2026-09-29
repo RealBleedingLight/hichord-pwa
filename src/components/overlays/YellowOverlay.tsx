@@ -1,8 +1,13 @@
 // src/components/overlays/YellowOverlay.tsx
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store';
-import type { SynthMode, AnalogWaveform, EffectType } from '@/audio/types';
+import type { SynthMode, AnalogWaveform, EffectType, Preset } from '@/audio/types';
 import { FM_PRESETS, ADSR_PRESETS } from '@/audio/types';
 import type { ADSRPresetName } from '@/audio/types';
+import { BUILTIN_INSTRUMENTS } from '@/audio/instruments';
+import { FACTORY_PRESETS } from '@/data/presets';
+import { getDB } from '@/db';
+import { applyPresetToStore, stateToPreset } from '@/data/preset-state';
 import {
   sectionLabelStyle, sectionStyle, rowStyle, chipStyle, sliderStyle,
 } from './shared';
@@ -24,25 +29,105 @@ const WAVEFORMS: { value: AnalogWaveform; label: string }[] = [
   { value: 'triangle', label: 'TRI' },
 ];
 
-const EFFECT_META: Record<EffectType, { label: string; min: number; max: number; step: number }> = {
-  filter: { label: 'FILTER', min: 20, max: 20000, step: 10 },
-  reverb: { label: 'REVERB', min: 0, max: 1, step: 0.01 },
-  delay: { label: 'DELAY', min: 0, max: 1, step: 0.01 },
-  chorus: { label: 'CHORUS', min: 0, max: 1, step: 0.01 },
-  flanger: { label: 'FLANGER', min: 0, max: 1, step: 0.01 },
-  tremolo: { label: 'TREMOLO', min: 0, max: 1, step: 0.01 },
-  lfoVibrato: { label: 'LFO VIBRATO', min: 0, max: 1, step: 0.01 },
-  glide: { label: 'GLIDE', min: 0, max: 1, step: 0.01 },
-  stereo: { label: 'STEREO', min: 0, max: 1, step: 0.01 },
-  voiceCount: { label: 'VOICE COUNT', min: 1, max: 8, step: 1 },
-};
-const EFFECT_ORDER: EffectType[] = [
-  'filter', 'reverb', 'delay', 'chorus', 'flanger', 'tremolo', 'lfoVibrato', 'glide', 'stereo', 'voiceCount',
+/** Effects that are wired into the audio chain. */
+const EFFECTS: { type: EffectType; label: string }[] = [
+  { type: 'filter', label: 'FILTER' },
+  { type: 'reverb', label: 'REVERB' },
+  { type: 'delay', label: 'DELAY' },
+  { type: 'chorus', label: 'CHORUS' },
+  { type: 'flanger', label: 'FLANGER' },
+  { type: 'tremolo', label: 'TREMOLO' },
 ];
 
-const ADSR_PRESET_NAMES: ADSRPresetName[] = ['LONG', 'SHORT', 'SWELL', 'PLUCK', 'TOUCH', 'SUSTAIN'];
+/** Filter cutoff is exponential in feel; the slider works in 0–1 and maps to 80 Hz–20 kHz. */
+const FILTER_MIN = 80;
+const FILTER_MAX = 20000;
+const cutoffToSlider = (hz: number) => Math.log(Math.max(FILTER_MIN, hz) / FILTER_MIN) / Math.log(FILTER_MAX / FILTER_MIN);
+const sliderToCutoff = (v: number) => Math.round(FILTER_MIN * Math.pow(FILTER_MAX / FILTER_MIN, v));
 
-const LABEL_COLOR = '#665520';
+const ADSR_PRESET_NAMES: ADSRPresetName[] = ['TOUCH', 'PLUCK', 'SHORT', 'SUSTAIN', 'LONG', 'SWELL'];
+
+const LABEL_COLOR = '#c9a84a';
+
+function AdsrCurve({ attack, decay, sustain, release }: { attack: number; decay: number; sustain: number; release: number }) {
+  // Scale times so the whole shape fits; hold the sustain for a fixed width.
+  const total = attack + decay + release + 400;
+  const w = 160;
+  const h = 32;
+  const x1 = (attack / total) * w;
+  const x2 = x1 + (decay / total) * w;
+  const x3 = x2 + (400 / total) * w;
+  const x4 = w;
+  const sy = h - sustain * (h - 2);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: 160, height: 32 }} aria-hidden>
+      <polyline points={`0,${h} ${x1},2 ${x2},${sy} ${x3},${sy} ${x4},${h}`} fill="none" stroke={CYBER.amber} strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function Presets() {
+  const [userPresets, setUserPresets] = useState<Preset[]>([]);
+  const showToast = useAppStore((s) => s.showToast);
+
+  const refresh = () => {
+    const db = getDB();
+    if (!db) return;
+    db.listPresets()
+      .then((all) => setUserPresets(all.filter((p) => !p.id.startsWith('factory-'))))
+      .catch(() => { /* IndexedDB unavailable */ });
+  };
+  useEffect(refresh, []);
+
+  const load = (preset: Preset) => {
+    applyPresetToStore(preset);
+    showToast(`Loaded “${preset.name}”`);
+  };
+
+  const save = async () => {
+    const db = getDB();
+    if (!db) {
+      showToast('Saving presets is not available in this browser');
+      return;
+    }
+    const name = window.prompt('Preset name', `My sound ${userPresets.length + 1}`)?.trim();
+    if (!name) return;
+    try {
+      await db.savePreset(stateToPreset(`user-${Date.now()}`, name));
+      showToast(`Saved “${name}”`);
+      refresh();
+    } catch {
+      showToast('Could not save preset');
+    }
+  };
+
+  const remove = async (preset: Preset) => {
+    const db = getDB();
+    if (!db || !window.confirm(`Delete “${preset.name}”?`)) return;
+    await db.deletePreset(preset.id).catch(() => {});
+    refresh();
+  };
+
+  return (
+    <div style={sectionStyle}>
+      <div style={sectionLabelStyle(ACCENT)}>Presets</div>
+      <div style={rowStyle}>
+        {FACTORY_PRESETS.map((p) => (
+          <button key={p.id} style={chipStyle(false, ACCENT)} onClick={() => load(p)}>{p.name}</button>
+        ))}
+        {userPresets.map((p) => (
+          <span key={p.id} style={{ display: 'inline-flex' }}>
+            <button style={{ ...chipStyle(false, ACCENT), color: CYBER.amber, borderRadius: '4px 0 0 4px' }} onClick={() => load(p)}>{p.name}</button>
+            <button aria-label={`Delete ${p.name}`} style={{ ...chipStyle(false, ACCENT), minWidth: 26, padding: '6px 6px', borderRadius: '0 4px 4px 0', borderLeft: '1px solid #333' }} onClick={() => void remove(p)}>✕</button>
+          </span>
+        ))}
+        <button data-testid="save-preset" style={{ ...chipStyle(false, ACCENT), border: '1px dashed ' + CYBER.amber, color: CYBER.amber }} onClick={() => void save()}>
+          + SAVE CURRENT
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function YellowOverlay() {
   const synthMode = useAppStore((s) => s.synthMode);
@@ -51,6 +136,9 @@ export function YellowOverlay() {
   const setWaveform = useAppStore((s) => s.setWaveform);
   const fmPresetIndex = useAppStore((s) => s.fmPresetIndex);
   const setFmPresetIndex = useAppStore((s) => s.setFmPresetIndex);
+  const sampleName = useAppStore((s) => s.sampleName);
+  const setSampleName = useAppStore((s) => s.setSampleName);
+  const micSampleAvailable = useAppStore((s) => s.micSampleAvailable);
   const effects = useAppStore((s) => s.effects);
   const setEffect = useAppStore((s) => s.setEffect);
   const adsr = useAppStore((s) => s.adsr);
@@ -58,6 +146,8 @@ export function YellowOverlay() {
 
   return (
     <div>
+      <Presets />
+
       <div style={sectionStyle}>
         <div style={sectionLabelStyle(ACCENT)}>Instrument</div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -99,11 +189,37 @@ export function YellowOverlay() {
         </div>
       )}
 
+      {synthMode === 'sample' && (
+        <div style={sectionStyle}>
+          <div style={sectionLabelStyle(ACCENT)}>Sample</div>
+          <div style={rowStyle}>
+            {BUILTIN_INSTRUMENTS.map((inst) => (
+              <button key={inst.id} style={chipStyle(sampleName === inst.id, ACCENT)} onClick={() => setSampleName(inst.id)}>
+                {inst.label}
+              </button>
+            ))}
+            <button
+              style={{ ...chipStyle(sampleName === 'mic', ACCENT), opacity: micSampleAvailable ? 1 : 0.5 }}
+              onClick={() => micSampleAvailable ? setSampleName('mic') : useAppStore.getState().setPlayMode('micSample')}
+              title={micSampleAvailable ? '' : 'Record one in MODE → MIC'}
+            >
+              {micSampleAvailable ? 'MY MIC' : 'MIC… (record)'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {synthMode === 'noise' && (
+        <div style={{ ...sectionStyle, fontSize: 12, color: '#aaa' }}>
+          Filtered noise tuned to the chord — breathy pads and wind. Try it with SWELL + REVERB.
+        </div>
+      )}
+
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle(ACCENT)}>Envelope (ADSR)</div>
-        <svg viewBox="0 0 120 28" style={{ width: 120, height: 28 }}>
-          <polyline points="0,28 12,2 30,10 75,10 120,28" fill="none" stroke={CYBER.amber} strokeWidth="1.5" opacity="0.8" />
-        </svg>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={sectionLabelStyle(ACCENT)}>Envelope</div>
+          <AdsrCurve {...adsr} />
+        </div>
         <div style={rowStyle}>
           {ADSR_PRESET_NAMES.map((name) => (
             <button
@@ -118,17 +234,17 @@ export function YellowOverlay() {
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', marginTop: 6 }}>
           {(
             [
-              { key: 'attack' as const, label: 'A', max: 2000 },
-              { key: 'decay' as const, label: 'D', max: 1000 },
-              { key: 'sustain' as const, label: 'S', max: 1 },
-              { key: 'release' as const, label: 'R', max: 3000 },
+              { key: 'attack' as const, label: 'ATTACK', max: 2000, unit: 'ms' },
+              { key: 'decay' as const, label: 'DECAY', max: 1000, unit: 'ms' },
+              { key: 'sustain' as const, label: 'SUSTAIN', max: 1, unit: '' },
+              { key: 'release' as const, label: 'RELEASE', max: 3000, unit: 'ms' },
             ]
           ).map((f) => (
             <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, minWidth: 12, color: LABEL_COLOR }}>{f.label}</span>
+              <span style={{ fontSize: 10, minWidth: 52, color: LABEL_COLOR }}>{f.label}</span>
               <input
                 type="range"
                 style={sliderStyle}
@@ -139,8 +255,8 @@ export function YellowOverlay() {
                 onChange={(e) => setAdsr({ ...adsr, [f.key]: parseFloat(e.target.value) })}
                 aria-label={`ADSR ${f.label}`}
               />
-              <span style={{ fontSize: 10, minWidth: 40, textAlign: 'right', color: LABEL_COLOR }}>
-                {f.key === 'sustain' ? adsr[f.key].toFixed(2) : Math.round(adsr[f.key])}
+              <span style={{ fontSize: 11, minWidth: 48, textAlign: 'right', color: '#ccc' }}>
+                {f.key === 'sustain' ? adsr[f.key].toFixed(2) : `${Math.round(adsr[f.key])}${f.unit}`}
               </span>
             </div>
           ))}
@@ -148,41 +264,41 @@ export function YellowOverlay() {
       </div>
 
       <div style={sectionStyle}>
-        <div style={sectionLabelStyle(ACCENT)}>Effects</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          {EFFECT_ORDER.map((type) => {
-            const meta = EFFECT_META[type];
+        <div style={sectionLabelStyle(ACCENT)}>Effects <span style={{ textTransform: 'none', fontWeight: 400, color: '#999' }}>— tap a name to switch it on/off</span></div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
+          {EFFECTS.map(({ type, label }) => {
             const state = effects[type];
+            const isFilter = type === 'filter';
+            const sliderValue = isFilter ? cutoffToSlider(state.value) : state.value;
             return (
-              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
                   onClick={() => setEffect(type, { enabled: !state.enabled })}
-                  aria-label={`toggle ${meta.label}`}
+                  aria-label={`toggle ${label}`}
                   aria-pressed={state.enabled}
                   style={{
-                    width: 8,
-                    height: 8,
-                    minWidth: 8,
-                    padding: 0,
-                    borderRadius: 2,
+                    minWidth: 78, height: 30, padding: '0 8px', borderRadius: 4,
                     background: state.enabled ? CYBER.amber : 'transparent',
-                    border: state.enabled ? 'none' : '1px solid #443300',
-                    boxShadow: state.enabled ? '0 0 4px ' + CYBER.amberGlow : 'none',
-                    cursor: 'pointer',
+                    border: '1px solid ' + (state.enabled ? CYBER.amber : '#554420'),
+                    color: state.enabled ? '#000' : LABEL_COLOR,
+                    fontSize: 10, fontWeight: 700, cursor: 'pointer', textAlign: 'left',
                   }}
-                />
-                <span style={{ fontSize: 8, color: state.enabled ? CYBER.amber : '#665520', minWidth: 40 }}>
-                  {meta.label}
-                </span>
+                >
+                  {state.enabled ? '● ' : '○ '}{label}
+                </button>
                 <input
                   type="range"
-                  style={{ ...sliderStyle, height: 3 }}
-                  min={meta.min}
-                  max={meta.max}
-                  step={meta.step}
-                  value={state.value}
-                  onChange={(e) => setEffect(type, { value: parseFloat(e.target.value) })}
-                  aria-label={`${meta.label} value`}
+                  style={{ ...sliderStyle, opacity: state.enabled ? 1 : 0.45 }}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={sliderValue}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    // Moving a slider implies you want to hear it.
+                    setEffect(type, { value: isFilter ? sliderToCutoff(v) : v, enabled: true });
+                  }}
+                  aria-label={`${label} value`}
                 />
               </div>
             );

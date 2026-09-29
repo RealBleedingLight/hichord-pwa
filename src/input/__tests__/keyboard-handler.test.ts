@@ -100,13 +100,22 @@ describe('KeyboardHandler', () => {
     expect(callbacks.onDirection).toHaveBeenLastCalledWith('center');
   });
 
-  it('does not call onDirection center while another direction key is still held', () => {
+  it('falls back to the still-held direction (not center) when one of two keys is released', () => {
     dispatchKeyDown('w');
     dispatchKeyDown('a');
     callbacks.onDirection.mockClear();
     dispatchKeyUp('w');
     expect(callbacks.onDirection).not.toHaveBeenCalledWith('center');
-    expect(callbacks.onDirection).not.toHaveBeenCalled();
+    expect(callbacks.onDirection).toHaveBeenCalledWith('left');
+  });
+
+  it('combines two held direction keys into a diagonal', () => {
+    dispatchKeyDown('w');
+    dispatchKeyDown('d');
+    expect(callbacks.onDirection).toHaveBeenLastCalledWith('upRight');
+    dispatchKeyDown('arrowleft');
+    // right + left cancel out, leaving up
+    expect(callbacks.onDirection).toHaveBeenLastCalledWith('up');
   });
 
   it('calls onFunctionButton(true) on keydown and (false) on keyup', () => {

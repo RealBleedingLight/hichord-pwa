@@ -1,74 +1,84 @@
 // src/components/DrumView.tsx
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useAppStore } from '@/store';
-import type { DrumSound } from '@/audio/types';
-import { GENRES, getPatternsForGenre, type DrumPattern } from '@/data/drum-patterns';
+import type { DrumKitName, DrumSound } from '@/audio/types';
+import { GENRES, getPatternsForGenre } from '@/data/drum-patterns';
 import { CYBER } from '@/theme';
 
 /* ── 4×4 Pad Layout ─────────────────────────────── */
-const DRUM_PADS: { sound: DrumSound; label: string; note: string }[] = [
-  { sound: 'kick',    label: 'KICK',    note: 'C1' },
-  { sound: 'snare',   label: 'SNARE',   note: 'D1' },
-  { sound: 'clap',    label: 'CLAP',    note: 'E1' },
-  { sound: 'rim',     label: 'RIM',     note: 'F1' },
-  { sound: 'closedHH', label: 'CH',     note: 'F#1' },
-  { sound: 'openHH',  label: 'OH',      note: 'G#1' },
-  { sound: 'tomHigh', label: 'TOM H',   note: 'A1' },
-  { sound: 'tomLow',  label: 'TOM L',   note: 'B1' },
-  { sound: 'perc',    label: 'PERC',    note: 'C2' },
-  { sound: 'crash',   label: 'CRASH',   note: 'C#2' },
-  { sound: 'ride',    label: 'RIDE',    note: 'D#2' },
-  { sound: 'shaker',  label: 'SHAKER',  note: 'E2' },
-  { sound: 'fx1',     label: 'FX 1',    note: 'F2' },
-  { sound: 'fx2',     label: 'FX 2',    note: 'G2' },
-  { sound: 'fx3',     label: 'FX 3',    note: 'A2' },
-  { sound: 'fx4',     label: 'FX 4',    note: 'B2' },
+const DRUM_PADS: { sound: DrumSound; label: string }[] = [
+  { sound: 'kick', label: 'KICK' },
+  { sound: 'snare', label: 'SNARE' },
+  { sound: 'clap', label: 'CLAP' },
+  { sound: 'rim', label: 'RIM' },
+  { sound: 'closedHH', label: 'HAT' },
+  { sound: 'openHH', label: 'OPEN HAT' },
+  { sound: 'tomHigh', label: 'TOM HI' },
+  { sound: 'tomLow', label: 'TOM LO' },
+  { sound: 'perc', label: 'COWBELL' },
+  { sound: 'crash', label: 'CRASH' },
+  { sound: 'ride', label: 'RIDE' },
+  { sound: 'shaker', label: 'SHAKER' },
+  { sound: 'altKick', label: 'KICK 2' },
+  { sound: 'fx1', label: 'ZAP' },
+  { sound: 'fx2', label: 'SUB' },
+  { sound: 'fx3', label: 'SWELL' },
 ];
 
-/* ── Step Sequencer Rows ────────────────────────── */
+/* ── Beat editor rows ─────────────────────────────── */
 const SEQ_ROWS: { sound: DrumSound; label: string; color: string }[] = [
-  { sound: 'kick',     label: 'KCK', color: CYBER.primary },
-  { sound: 'snare',    label: 'SNR', color: CYBER.amber },
-  { sound: 'closedHH', label: 'CHH', color: CYBER.secondary },
-  { sound: 'openHH',   label: 'OHH', color: CYBER.secondary },
-  { sound: 'clap',     label: 'CLP', color: CYBER.amber },
+  { sound: 'kick', label: 'KICK', color: CYBER.primary },
+  { sound: 'snare', label: 'SNR', color: CYBER.amber },
+  { sound: 'clap', label: 'CLAP', color: CYBER.amber },
+  { sound: 'closedHH', label: 'HAT', color: CYBER.secondary },
+  { sound: 'openHH', label: 'OHAT', color: CYBER.secondary },
+  { sound: 'bellRide', label: 'RIDE', color: '#b388ff' },
+  { sound: 'tom', label: 'TOM', color: '#4caf50' },
+];
+
+const DRUM_KITS: { value: DrumKitName; label: string }[] = [
+  { value: 'tight', label: 'TIGHT' },
+  { value: 'x0x', label: '808' },
+  { value: 'x9x', label: '909' },
+  { value: 'lynn', label: 'LYNN' },
+  { value: 'kr78', label: 'KR78' },
+  { value: 'trap', label: 'TRAP' },
 ];
 
 const NUM_STEPS = 16;
-const NUM_PATTERNS = 4;
-
-type StepGrid = boolean[][];
-
-function emptyGrid(): StepGrid {
-  return SEQ_ROWS.map(() => new Array(NUM_STEPS).fill(false) as boolean[]);
-}
 
 export interface DrumViewProps {
   onTriggerDrum: (sound: DrumSound) => void;
   onHoldChange?: (sound: DrumSound, held: boolean) => void;
-  onPatternChange?: (pattern: DrumPattern | null) => void;
-  isPlaying?: boolean;
-  onTogglePlay?: () => void;
+  onToggleTransport?: () => void;
 }
 
-export function DrumView({ onTriggerDrum, onHoldChange, onPatternChange, isPlaying, onTogglePlay }: DrumViewProps) {
+export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport }: DrumViewProps) {
   const mode = useAppStore((s) => s.playMode);
+  const beatGenre = useAppStore((s) => s.beatGenre);
+  const beatVariation = useAppStore((s) => s.beatVariation);
+  const beatHits = useAppStore((s) => s.beatHits);
+  const beatEdited = useAppStore((s) => s.beatEdited);
+  const selectBeat = useAppStore((s) => s.selectBeat);
+  const toggleBeatHit = useAppStore((s) => s.toggleBeatHit);
+  const clearBeat = useAppStore((s) => s.clearBeat);
+  const transportPlaying = useAppStore((s) => s.transportPlaying);
+  const transportStep = useAppStore((s) => s.transportStep);
+  const drumKit = useAppStore((s) => s.drumKit);
+  const setDrumKit = useAppStore((s) => s.setDrumKit);
   const [heldSounds, setHeldSounds] = useState<Set<DrumSound>>(new Set());
-  const [genre, setGenre] = useState<string>(GENRES[0] ?? 'Rock');
-  const [variationIndex, setVariationIndex] = useState(0);
-  const [activePattern, setActivePattern] = useState(0);
-  const [patterns, setPatterns] = useState<StepGrid[]>(() =>
-    Array.from({ length: NUM_PATTERNS }, () => emptyGrid()),
-  );
-  const [currentStep] = useState(0); // playhead position — visual only for now
 
-  const genrePatterns = getPatternsForGenre(genre);
-  const currentGenrePattern = genrePatterns[variationIndex] ?? genrePatterns[0] ?? null;
+  const genrePatterns = getPatternsForGenre(beatGenre);
+  const currentStep = transportPlaying && transportStep !== null ? transportStep % NUM_STEPS : null;
 
-  useEffect(() => {
-    onPatternChange?.(currentGenrePattern);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentGenrePattern?.name]);
+  const hitSet = useMemo(() => new Set(beatHits.map((h) => `${h.sound}:${h.step}`)), [beatHits]);
+  // Show any extra sounds the chosen pattern uses beyond the default rows.
+  const rows = useMemo(() => {
+    const extra = [...new Set(beatHits.map((h) => h.sound))]
+      .filter((s) => !SEQ_ROWS.some((r) => r.sound === s))
+      .map((s) => ({ sound: s, label: s.slice(0, 4).toUpperCase(), color: '#888' }));
+    return [...SEQ_ROWS, ...extra];
+  }, [beatHits]);
 
   const handlePadDown = useCallback((sound: DrumSound) => {
     onTriggerDrum(sound);
@@ -78,6 +88,7 @@ export function DrumView({ onTriggerDrum, onHoldChange, onPatternChange, isPlayi
 
   const handlePadUp = useCallback((sound: DrumSound) => {
     setHeldSounds((prev) => {
+      if (!prev.has(sound)) return prev;
       const next = new Set(prev);
       next.delete(sound);
       return next;
@@ -85,200 +96,114 @@ export function DrumView({ onTriggerDrum, onHoldChange, onPatternChange, isPlayi
     onHoldChange?.(sound, false);
   }, [onHoldChange]);
 
-  const handleGenreSelect = (g: string) => {
-    setGenre(g);
-    setVariationIndex(0);
-  };
-
-  const toggleStep = (rowIdx: number, stepIdx: number) => {
-    setPatterns((prev) => {
-      const next = prev.map((p) => p.map((r) => [...r]));
-      const grid = next[activePattern];
-      if (grid) {
-        const row = grid[rowIdx];
-        if (row) {
-          row[stepIdx] = !row[stepIdx];
-        }
-      }
-      return next;
-    });
-  };
-
-  const grid = patterns[activePattern] ?? emptyGrid();
+  const chip = (active: boolean): React.CSSProperties => ({
+    padding: '5px 8px', borderRadius: 4,
+    border: active ? 'none' : '1px solid ' + CYBER.border,
+    background: active ? CYBER.primary : '#1a0808',
+    color: active ? '#fff' : CYBER.textDim,
+    fontSize: 10, fontWeight: 700, fontFamily: CYBER.fontMono,
+    cursor: 'pointer', letterSpacing: 1, touchAction: 'manipulation',
+  });
 
   return (
     <div style={{
       width: '100%', height: '100%',
-      display: 'grid', gridTemplateColumns: '340px 1fr',
-      gap: 8, padding: 8, overflow: 'hidden',
+      display: 'grid', gridTemplateColumns: 'minmax(220px, 34%) 1fr',
+      gap: 10, padding: 6, overflow: 'hidden',
     }}>
       {/* ── Left: 4×4 Pad Grid ──────────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {mode === 'autoDrum' && (
-          <div style={{ fontSize: 9, color: CYBER.textDim, textAlign: 'center', fontFamily: CYBER.fontMono }}>
-            HOLD PADS TO TRIGGER AT CLOCK RATE
-          </div>
-        )}
-
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6,
-          flex: 1,
-        }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
+        <div style={{ fontSize: 11, color: CYBER.textDim, textAlign: 'center', fontFamily: CYBER.fontMono }}>
+          {mode === 'autoDrum' ? 'HOLD A PAD — IT REPEATS AT THE ARP RATE' : 'TAP PADS TO PLAY'}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridAutoRows: '1fr', gap: 5, flex: 1, minHeight: 0 }}>
           {DRUM_PADS.map((pad) => {
             const isHeld = heldSounds.has(pad.sound);
             return (
               <button
                 key={pad.sound}
                 data-testid={`drum-pad-${pad.sound}`}
-                onPointerDown={() => handlePadDown(pad.sound)}
+                onPointerDown={(e) => { e.preventDefault(); handlePadDown(pad.sound); }}
                 onPointerUp={() => handlePadUp(pad.sound)}
                 onPointerLeave={() => handlePadUp(pad.sound)}
+                onPointerCancel={() => handlePadUp(pad.sound)}
                 style={{
                   borderRadius: 8,
-                  border: isHeld ? 'none' : '1px solid #440000',
+                  border: isHeld ? 'none' : '1px solid ' + CYBER.borderBright,
                   background: isHeld ? CYBER.primary : '#1a0808',
                   boxShadow: isHeld ? '0 0 16px ' + CYBER.primaryGlow : 'none',
                   cursor: 'pointer',
-                  touchAction: 'manipulation',
-                  display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', justifyContent: 'center',
-                  gap: 2, padding: 4,
+                  touchAction: 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: 2, minHeight: 0,
+                  fontSize: 10, fontWeight: 700, fontFamily: CYBER.fontMono,
+                  color: isHeld ? '#fff' : CYBER.textMid, letterSpacing: 0.5,
                 }}
               >
-                <span style={{
-                  fontSize: 10, fontWeight: 700,
-                  fontFamily: CYBER.fontMono,
-                  color: isHeld ? '#fff' : '#884444',
-                  letterSpacing: 1,
-                }}>{pad.label}</span>
-                <span style={{
-                  fontSize: 7, color: isHeld ? 'rgba(255,255,255,.6)' : '#553333',
-                  fontFamily: CYBER.fontMono,
-                }}>{pad.note}</span>
+                {pad.label}
               </button>
             );
           })}
         </div>
-
-        {/* Genre / Variation selectors for drumLoops */}
-        {mode === 'drumLoops' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center' }}>
-              {GENRES.map((g) => (
-                <button
-                  key={g}
-                  data-testid={`genre-tab-${g}`}
-                  onClick={() => handleGenreSelect(g)}
-                  style={{
-                    padding: '3px 6px', borderRadius: 4,
-                    border: genre === g ? 'none' : '1px solid ' + CYBER.border,
-                    background: genre === g ? CYBER.primary : '#1a0808',
-                    color: genre === g ? '#fff' : CYBER.textDim,
-                    fontSize: 8, fontWeight: 700, fontFamily: CYBER.fontMono,
-                    cursor: 'pointer', letterSpacing: 1,
-                  }}
-                >
-                  {g.toUpperCase()}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center' }}>
-              {genrePatterns.map((p, i) => (
-                <button
-                  key={p.name}
-                  data-testid={`variation-${p.variation}`}
-                  onClick={() => setVariationIndex(i)}
-                  style={{
-                    padding: '3px 6px', borderRadius: 4,
-                    border: i === variationIndex ? 'none' : '1px solid ' + CYBER.border,
-                    background: i === variationIndex ? CYBER.primary : '#1a0808',
-                    color: i === variationIndex ? '#fff' : CYBER.textDim,
-                    fontSize: 8, fontWeight: 700, fontFamily: CYBER.fontMono,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {p.variation.toUpperCase()}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span style={{ fontSize: 9, color: CYBER.textMid, fontFamily: CYBER.fontMono }} data-testid="current-pattern-name">
-                {currentGenrePattern?.name ?? ''}
-              </span>
-              <button
-                data-testid="drum-pattern-transport"
-                onClick={() => onTogglePlay?.()}
-                style={{
-                  minWidth: 36, minHeight: 24, borderRadius: 4,
-                  border: 'none',
-                  background: isPlaying ? CYBER.primary : '#1a0808',
-                  color: isPlaying ? '#fff' : CYBER.textMid,
-                  fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                  boxShadow: isPlaying ? '0 0 8px ' + CYBER.primaryGlow : 'none',
-                }}
-              >
-                {isPlaying ? '⏹' : '▶'}
-              </button>
-            </div>
-          </div>
-        )}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center' }}>
+          {DRUM_KITS.map((k) => (
+            <button key={k.value} onClick={() => setDrumKit(k.value)} style={chip(drumKit === k.value)}>{k.label}</button>
+          ))}
+        </div>
       </div>
 
-      {/* ── Right: Step Sequencer Grid ──────────────── */}
-      <div style={{
-        display: 'flex', flexDirection: 'column', gap: 4,
-        overflow: 'hidden',
-      }}>
-        {/* Pattern banks */}
-        <div style={{ display: 'flex', gap: 4, padding: '0 4px' }}>
-          {Array.from({ length: NUM_PATTERNS }, (_, i) => (
+      {/* ── Right: the beat (plays with ▶ on the bottom bar) ─ */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          {GENRES.map((g) => (
+            <button key={g} data-testid={`genre-tab-${g}`} onClick={() => selectBeat(g, 0)} style={chip(beatGenre === g)}>
+              {g.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          {genrePatterns.map((p, i) => (
             <button
-              key={i}
-              onClick={() => setActivePattern(i)}
-              style={{
-                padding: '3px 10px', borderRadius: 4,
-                border: activePattern === i ? 'none' : '1px solid #330000',
-                background: activePattern === i ? CYBER.primary : '#1a0808',
-                color: activePattern === i ? '#fff' : CYBER.textDim,
-                fontSize: 9, fontWeight: 700, fontFamily: CYBER.fontMono,
-                cursor: 'pointer', letterSpacing: 1,
-                boxShadow: activePattern === i ? '0 0 8px ' + CYBER.primaryGlow : 'none',
-              }}
+              key={p.name}
+              data-testid={`variation-${p.variation}`}
+              onClick={() => selectBeat(beatGenre, i)}
+              style={chip(i === beatVariation && !beatEdited)}
             >
-              P{i + 1}
+              {p.variation.toUpperCase()}
             </button>
           ))}
         </div>
 
-        {/* Sequencer grid */}
-        <div style={{
-          flex: 1, display: 'flex', flexDirection: 'column', gap: 2,
-          overflow: 'auto',
-        }}>
-          {SEQ_ROWS.map((row, rowIdx) => (
-            <div key={row.sound} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <span style={{
-                width: 28, fontSize: 7, color: '#884444',
-                fontFamily: CYBER.fontMono, textAlign: 'right',
-                paddingRight: 4, flexShrink: 0, letterSpacing: 0.5,
-              }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'auto' }}>
+          {rows.map((row) => (
+            <div key={row.sound} style={{ display: 'flex', alignItems: 'stretch', gap: 2, flex: 1, minHeight: 18, maxHeight: 34 }}>
+              <button
+                onPointerDown={(e) => { e.preventDefault(); onTriggerDrum(row.sound); }}
+                style={{
+                  width: 40, fontSize: 10, color: row.color, background: 'transparent', border: 'none',
+                  fontFamily: CYBER.fontMono, textAlign: 'right', paddingRight: 4, flexShrink: 0, cursor: 'pointer',
+                }}
+              >
                 {row.label}
-              </span>
+              </button>
               {Array.from({ length: NUM_STEPS }, (_, stepIdx) => {
-                const active = grid[rowIdx]?.[stepIdx] ?? false;
+                const active = hitSet.has(`${row.sound}:${stepIdx}`);
+                const isNow = currentStep === stepIdx;
                 return (
                   <button
                     key={stepIdx}
-                    onClick={() => toggleStep(rowIdx, stepIdx)}
+                    data-testid={`beat-cell-${row.sound}-${stepIdx}`}
+                    aria-pressed={active}
+                    onClick={() => toggleBeatHit(stepIdx, row.sound)}
                     style={{
-                      flex: 1, minHeight: 22,
+                      flex: 1, minWidth: 0,
                       borderRadius: 3,
-                      border: active ? 'none' : '1px solid #330000',
-                      background: active ? row.color : '#1a0808',
-                      boxShadow: active ? `0 0 8px ${row.color}44` : 'none',
+                      border: isNow ? '1px solid #fff' : active ? 'none' : '1px solid ' + (stepIdx % 4 === 0 ? '#552222' : '#331111'),
+                      background: active ? row.color : stepIdx % 4 === 0 ? '#1f0a0a' : '#140606',
+                      boxShadow: active && isNow ? `0 0 10px ${row.color}` : 'none',
                       cursor: 'pointer',
                       touchAction: 'manipulation',
-                      opacity: active ? 1 : 0.7,
+                      padding: 0,
                     }}
                   />
                 );
@@ -287,15 +212,24 @@ export function DrumView({ onTriggerDrum, onHoldChange, onPatternChange, isPlayi
           ))}
         </div>
 
-        {/* Playhead row */}
-        <div style={{ display: 'flex', gap: 2, padding: '0 0 0 32px' }}>
-          {Array.from({ length: NUM_STEPS }, (_, i) => (
-            <div key={i} style={{
-              flex: 1, height: 4, borderRadius: 2,
-              background: i === currentStep ? CYBER.primary : '#220000',
-              boxShadow: i === currentStep ? '0 0 6px ' + CYBER.primaryGlow : 'none',
-            }} />
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            data-testid="drum-pattern-transport"
+            onClick={() => onToggleTransport?.()}
+            style={{
+              height: 32, padding: '0 14px', borderRadius: 6, border: 'none',
+              background: transportPlaying ? CYBER.secondary : '#1a0808',
+              color: transportPlaying ? '#000' : CYBER.secondary,
+              fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            {transportPlaying ? '■ STOP' : '▶ PLAY'}
+          </button>
+          <span style={{ fontSize: 12, color: CYBER.textMid, fontFamily: CYBER.fontMono }} data-testid="current-pattern-name">
+            {beatGenre} - {genrePatterns[beatVariation]?.variation ?? ''}{beatEdited ? ' (edited)' : ''}
+          </span>
+          <span style={{ flex: 1 }} />
+          <button onClick={clearBeat} style={chip(false)}>CLEAR</button>
         </div>
       </div>
     </div>

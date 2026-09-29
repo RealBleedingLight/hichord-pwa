@@ -64,10 +64,20 @@ describe('LooperView', () => {
   });
 
   it('mute toggle calls onTrackMuteToggle without changing active track', () => {
+    useAppStore.getState().setLooperTrack(1, { state: 'playing' });
     const onTrackMuteToggle = vi.fn();
     render(<LooperView onRecordToggle={vi.fn()} onStop={vi.fn()} onPlayToggle={vi.fn()} onTrackMuteToggle={onTrackMuteToggle} />);
     fireEvent.click(screen.getByTestId('looper-track-mute-1'));
     expect(onTrackMuteToggle).toHaveBeenCalledWith(1);
     expect(useAppStore.getState().activeTrack).toBe(0);
+  });
+
+  it('only offers mute/clear on tracks that have audio', () => {
+    useAppStore.getState().setLooperTrack(2, { state: 'playing' });
+    const onTrackClear = vi.fn();
+    render(<LooperView onRecordToggle={vi.fn()} onStop={vi.fn()} onPlayToggle={vi.fn()} onTrackMuteToggle={vi.fn()} onTrackClear={onTrackClear} />);
+    expect(screen.queryByTestId('looper-track-mute-3')).toBeNull();
+    fireEvent.click(screen.getByTestId('looper-track-clear-2'));
+    expect(onTrackClear).toHaveBeenCalledWith(2);
   });
 });

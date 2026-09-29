@@ -5,15 +5,21 @@ import type { Arpeggiator } from './arpeggiator';
 import type { PlayMode, StrumSpeed, ArpPattern, ArpRate, ArpChordMode } from './types';
 import { STRUM_INTERVALS } from './types';
 
+/** Fraction of a clock step that repeat/arp notes sound for (the rest is gap). */
+const REPEAT_GATE = 0.5;
+const ARP_GATE = 0.85;
+
 /**
  * Routes chord-down/chord-up events from the UI to the AudioEngine according to
  * the currently active PlayMode (Play, Strum, Lead, Drone, Repeat, Arpeggio).
+ *
+ * The clock passed in is dedicated to this handler (the arp/repeat rate), so
+ * it never fights the transport clock that drives the beat and sequencer.
  */
 export class PlayModeHandler {
   private mode: PlayMode = 'play';
   private strumSpeed: StrumSpeed = 'medium';
   private droneActive = false;
-  private strumTimeouts: ReturnType<typeof setTimeout>[] = [];
   private tickUnsubscribe: (() => void) | null = null;
 
   constructor(
@@ -25,6 +31,10 @@ export class PlayModeHandler {
   setMode(mode: PlayMode): void {
     this.forceStopActive();
     this.mode = mode;
+  }
+
+  getMode(): PlayMode {
+    return this.mode;
   }
 
   setStrumSpeed(speed: StrumSpeed): void {
@@ -39,10 +49,9 @@ export class PlayModeHandler {
   }
 
   handleChordDown(voicing: ChordVoicing): void {
-    this.clearStrumTimeouts();
     switch (this.mode) {
       case 'strum':
-        this.handleStrumDown(voicing);
+        this.engine.triggerChord(voicing, undefined, STRUM_INTERVALS[this.strumSpeed] / 1000);
         break;
       case 'lead':
         this.handleLeadDown(voicing);
@@ -63,6 +72,23 @@ export class PlayModeHandler {
     }
   }
 
+  /**
+   * Switches the chord that's already sounding (e.g. the gesture pad moved
+   * while a key is held). Clock-driven modes keep their rhythm and pick up the
+   * new notes on the next step instead of restarting from step 0.
+   */
+  updateChord(voicing: ChordVoicing): void {
+    if (this.mode === 'arpeggio' && this.tickUnsubscribe) {
+      this.arpeggiator.setChord(voicing);
+      return;
+    }
+    if (this.mode === 'repeat' && this.tickUnsubscribe) {
+      this.repeatVoicing = voicing;
+      return;
+    }
+    this.handleChordDown(voicing);
+  }
+
   handleChordUp(): void {
     switch (this.mode) {
       case 'drone':
@@ -74,7 +100,6 @@ export class PlayModeHandler {
         this.engine.releaseChord();
         return;
       default:
-        this.clearStrumTimeouts();
         this.engine.releaseChord();
     }
   }
@@ -86,24 +111,7 @@ export class PlayModeHandler {
 
   /** Panic/cleanup: stops any active mode-specific playback and releases notes. */
   stop(): void {
-    this.forceStopActive();
-    this.engine.releaseChord();
-  }
-
-  private handleStrumDown(voicing: ChordVoicing): void {
-    const allNotes = voicing.bass ? [voicing.bass, ...voicing.notes] : voicing.notes;
-    const interval = STRUM_INTERVALS[this.strumSpeed];
-
-    allNotes.forEach((_, i) => {
-      const fire = () => {
-        this.engine.triggerChord({ ...voicing, bass: null, notes: allNotes.slice(0, i + 1) });
-      };
-      if (i === 0) {
-        fire();
-      } else {
-        this.strumTimeouts.push(setTimeout(fire, interval * i));
-      }
-    });
+    if (!this.forceStopActive()) this.engine.releaseChord();
   }
 
   private handleLeadDown(voicing: ChordVoicing): void {
@@ -114,30 +122,40 @@ export class PlayModeHandler {
   }
 
   private handleDroneDown(voicing: ChordVoicing): void {
-    if (this.droneActive) {
-      this.engine.releaseChord();
-    }
     this.engine.triggerChord(voicing);
     this.droneActive = true;
   }
 
+  private repeatVoicing: ChordVoicing | null = null;
+
   private handleRepeatDown(voicing: ChordVoicing): void {
     this.stopClockDrivenMode();
-    this.clock.start();
-    this.tickUnsubscribe = this.clock.onTick(() => {
-      this.engine.triggerChord(voicing);
+    this.repeatVoicing = voicing;
+    // Subscribe before starting: start() fires the first step immediately.
+    this.tickUnsubscribe = this.clock.onTick((time) => {
+      const current = this.repeatVoicing;
+      if (!current) return;
+      this.engine.triggerChord(current, time);
+      this.engine.releaseChord(time + this.stepSeconds() * REPEAT_GATE);
     });
+    this.clock.start();
   }
 
   private handleArpeggioDown(voicing: ChordVoicing): void {
     this.stopClockDrivenMode();
     this.arpeggiator.setChord(voicing);
-    this.clock.start();
-    this.tickUnsubscribe = this.clock.onTick((_time, step) => {
+    this.tickUnsubscribe = this.clock.onTick((time, step) => {
       const notes = this.arpeggiator.getNextNote(step);
       if (notes.length === 0) return;
-      this.engine.triggerChord({ ...voicing, bass: null, notes });
+      this.engine.triggerChord({ ...voicing, bass: null, notes }, time);
+      this.engine.releaseChord(time + this.stepSeconds() * ARP_GATE);
     });
+    this.clock.start();
+  }
+
+  private stepSeconds(): number {
+    const clock = this.clock as MasterClock & { getStepDuration?: () => number };
+    return typeof clock.getStepDuration === 'function' ? clock.getStepDuration() : 0.25;
   }
 
   private stopClockDrivenMode(): void {
@@ -145,31 +163,19 @@ export class PlayModeHandler {
       this.tickUnsubscribe();
       this.tickUnsubscribe = null;
       this.clock.stop();
+      this.repeatVoicing = null;
       if (this.mode === 'arpeggio') {
         this.arpeggiator.reset();
       }
     }
   }
 
-  private clearStrumTimeouts(): void {
-    for (const t of this.strumTimeouts) clearTimeout(t);
-    this.strumTimeouts = [];
-  }
-
-  /** Stops whatever mode-specific playback is in flight, without releasing the synth. */
-  private forceStopActive(): void {
-    this.clearStrumTimeouts();
-    if (this.tickUnsubscribe) {
-      this.tickUnsubscribe();
-      this.tickUnsubscribe = null;
-      this.clock.stop();
-      if (this.mode === 'arpeggio') {
-        this.arpeggiator.reset();
-      }
-    }
-    if (this.droneActive) {
-      this.engine.releaseChord();
-      this.droneActive = false;
-    }
+  /** Stops whatever mode-specific playback is in flight. Returns true if it released notes. */
+  private forceStopActive(): boolean {
+    const active = this.tickUnsubscribe !== null || this.droneActive;
+    this.stopClockDrivenMode();
+    this.droneActive = false;
+    if (active) this.engine.releaseChord();
+    return active;
   }
 }

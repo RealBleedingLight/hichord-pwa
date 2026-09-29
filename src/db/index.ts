@@ -183,3 +183,17 @@ export class HiChordDB {
     return importPreset(json);
   }
 }
+
+let sharedDB: HiChordDB | null = null;
+
+/** Lazily-opened app-wide database handle (IndexedDB may be unavailable, e.g. private mode). */
+export function getDB(): HiChordDB | null {
+  if (sharedDB) return sharedDB;
+  if (typeof indexedDB === 'undefined') return null;
+  try {
+    sharedDB = new HiChordDB();
+  } catch {
+    return null;
+  }
+  return sharedDB;
+}

@@ -2,40 +2,58 @@
 import { useAppStore } from '@/store';
 import { CYBER } from '@/theme';
 
-const METER_HEIGHTS = [40, 60, 80, 50, 30];
+const SCALE_NAMES: Record<string, string> = {
+  major: 'major', naturalMinor: 'minor', harmonicMinor: 'harm. minor', melodicMinor: 'mel. minor',
+  majorPentatonic: 'major penta', minorPentatonic: 'minor penta', blues: 'blues',
+  dorian: 'dorian', mixolydian: 'mixolydian', lydian: 'lydian',
+};
+
+const MODE_NAMES: Record<string, string> = {
+  play: 'PLAY', strum: 'STRUM', lead: 'LEAD', drone: 'DRONE', repeat: 'REPEAT', arpeggio: 'ARP',
+  sequencer: 'SEQUENCER', drum: 'DRUM PADS', drumLoops: 'BEATS', autoDrum: 'AUTO DRUM',
+  micSample: 'MIC SAMPLE', tuner: 'TUNER', chordHiro: 'CHORD HERO', earTrainer: 'EAR TRAINER', mixer: 'LOOPER',
+};
 
 export function InfoBar() {
   const key = useAppStore((s) => s.key);
   const scale = useAppStore((s) => s.scale);
-  const bpm = useAppStore((s) => s.bpm);
   const playMode = useAppStore((s) => s.playMode);
   const chordName = useAppStore((s) => s.currentChordName);
+  const setActiveOverlay = useAppStore((s) => s.setActiveOverlay);
 
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: 16,
+      gap: 14,
       fontSize: 13,
       fontFamily: CYBER.fontMono,
+      minWidth: 0,
+      overflow: 'hidden',
     }}>
-      <span style={{ color: CYBER.secondary, fontSize: 12, fontWeight: 600 }}>{key} {scale}</span>
-      <span style={{ fontFamily: CYBER.fontDisplay, fontWeight: 700, color: CYBER.textLight, fontSize: 16 }}>{chordName || '—'}</span>
-      <span style={{ color: CYBER.primary, fontSize: 10 }}>{playMode}</span>
-      <span style={{ color: CYBER.textDim, fontSize: 10 }}>BPM:{bpm}</span>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 14 }}>
-        {METER_HEIGHTS.map((h, i) => (
-          <div
-            key={i}
-            style={{
-              width: 3,
-              height: `${h}%`,
-              background: i < 3 ? CYBER.primary : '#220000',
-              boxShadow: i < 3 ? '0 0 6px ' + CYBER.primaryGlow : 'none',
-            }}
-          />
-        ))}
-      </div>
+      <button
+        onClick={() => setActiveOverlay('gray')}
+        style={{ background: 'none', border: 'none', color: CYBER.secondary, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: CYBER.fontMono, whiteSpace: 'nowrap' }}
+      >
+        {key} {SCALE_NAMES[scale] ?? scale}
+      </button>
+      <span style={{ fontFamily: CYBER.fontDisplay, fontWeight: 700, color: CYBER.textLight, fontSize: 16, minWidth: 60, whiteSpace: 'nowrap' }}>{chordName || '—'}</span>
+      <button
+        onClick={() => setActiveOverlay('red')}
+        style={{ background: 'none', border: 'none', color: CYBER.primary, fontSize: 12, cursor: 'pointer', fontFamily: CYBER.fontMono, letterSpacing: 1, whiteSpace: 'nowrap' }}
+      >
+        {MODE_NAMES[playMode] ?? playMode}
+      </button>
+      <button
+        aria-label="Help"
+        onClick={() => setActiveOverlay('help')}
+        style={{
+          width: 28, height: 28, borderRadius: '50%', border: '1px solid ' + CYBER.borderBright,
+          background: 'transparent', color: CYBER.textMid, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+        }}
+      >
+        ?
+      </button>
     </div>
   );
 }

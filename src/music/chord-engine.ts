@@ -37,9 +37,26 @@ function getQualitiesForScale(scale: ScaleName): ChordQuality[] {
     case 'lydian':
       return ['major', 'major', 'minor', 'diminished', 'major', 'minor', 'minor'];
     case 'blues':
+      return MINOR_SCALE_QUALITIES;
     case 'majorPentatonic':
     default:
       return MAJOR_SCALE_QUALITIES;
+  }
+}
+
+/**
+ * Pentatonic and blues scales have fewer than 7 notes, so they can't supply a
+ * root for every chord button. Harmonise them from their 7-note parent scale
+ * instead (major pentatonic → major, minor pentatonic / blues → natural minor).
+ */
+function getHarmonyScale(scale: ScaleName): ScaleName {
+  switch (scale) {
+    case 'majorPentatonic': return 'major';
+    case 'minorPentatonic':
+    case 'blues':
+      return 'naturalMinor';
+    default:
+      return scale;
   }
 }
 
@@ -58,6 +75,19 @@ function qualitySuffix(quality: ChordQuality): string {
     case 'sus4': return 'sus4';
     case 'sixth': return '6';
     case 'ninth': return '9';
+    case 'dom9': return '9';
+    case 'add9': return 'add9';
+    case 'add11': return 'add11';
+    case 'min11': return 'm11';
+    case 'dom7sharp9': return '7♯9';
+    case 'sus4plus7': return '7sus4';
+    case 'minMaj7': return 'm(maj7)';
+    case 'maj13': return 'maj13';
+    case 'sixNine': return '6/9';
+    case 'maj7sharp11': return 'maj7♯11';
+    case 'dom13': return '13';
+    case 'dom7flat9': return '7♭9';
+    case 'dom7alt': return '7alt';
     default: return quality;
   }
 }
@@ -97,7 +127,7 @@ export function getDiatonicChord(
   octave: number,
   inversion: Inversion = 0,
 ): ChordVoicing {
-  const scaleNotes = getScaleNotes(key, scale, octave);
+  const scaleNotes = getScaleNotes(key, getHarmonyScale(scale), octave);
   const degreeIndex = degree - 1;
   const rootMidi = scaleNotes[degreeIndex]!;
   const quality = getQualitiesForScale(scale)[degreeIndex]!;
@@ -256,14 +286,49 @@ export function getChord(
     };
   }
 
-  // Add bass note.
+  // Add bass note: the chord root an octave down, or (slash mode) the chord's
+  // fifth below the root, which gives the open "C/G" sound.
   if (bassMode !== 'off') {
     const rootNote = chord.notes.find(
       (n) => n.name.replace(/\d+$/, '') === chord.rootName,
     );
     const rootMidi = rootNote ? rootNote.midi : chord.notes[0]!.midi;
-    chord = { ...chord, bass: makeNote(rootMidi - 12) };
+    const bassMidi = bassMode === 'slash' ? rootMidi - 5 : rootMidi - 12;
+    chord = { ...chord, bass: makeNote(bassMidi) };
   }
 
   return chord;
+}
+
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'] as const;
+
+/** Roman-numeral label for a scale degree, cased/marked by chord quality (ii, vii°, III+). */
+export function romanNumeral(degree: ScaleDegree, quality: ChordQuality): string {
+  const base = ROMAN[degree - 1] ?? String(degree);
+  switch (quality) {
+    case 'minor': return base.toLowerCase();
+    case 'diminished': return `${base.toLowerCase()}°`;
+    case 'augmented': return `${base}+`;
+    default: return base;
+  }
+}
+
+/** Chord name + roman numeral for each of the 7 chord buttons in a key/scale. */
+export function getDegreeLabels(key: Key, scale: ScaleName): { name: string; roman: string }[] {
+  return ([1, 2, 3, 4, 5, 6, 7] as ScaleDegree[]).map((degree) => {
+    const chord = getDiatonicChord(key, scale, degree, 4);
+    return { name: chord.displayName, roman: romanNumeral(degree, chord.quality) };
+  });
+}
+
+/** Short label for what a gesture-pad direction does in the given joystick mode. */
+export function directionLabel(direction: JoystickDirection, mode: JoystickMode): string {
+  if (direction === 'center') return '';
+  if (direction === 'up' && mode === 'default') return 'maj↔min';
+  const quality = getModeMap(mode)[direction];
+  if (!quality) return '';
+  const suffix = qualitySuffix(quality);
+  if (quality === 'major') return 'maj';
+  if (quality === 'minor') return 'min';
+  return suffix;
 }

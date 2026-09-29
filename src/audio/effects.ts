@@ -188,12 +188,13 @@ export class EffectsChain {
 
   setBpm(bpm: number): void {
     this.bpm = bpm;
-    if (this.effectStates.get('delay')) {
-      // Re-sync delay time
-      const currentValue = this.delayNode.delayTime.value;
-      // Keep same subdivision
-      void currentValue;
-    }
+    this.syncDelayTime();
+  }
+
+  /** Delay repeats on a dotted eighth, locked to the current tempo. */
+  private syncDelayTime(): void {
+    const beatDuration = 60 / this.bpm;
+    this.delayNode.delayTime.value = Math.min(1.9, beatDuration * 0.75);
   }
 
   setEffect(type: EffectType, enabled: boolean, value: number): void {
@@ -207,11 +208,10 @@ export class EffectsChain {
         this.reverbWet.gain.value = enabled ? value : 0;
         break;
       case 'delay': {
-        this.delayWet.gain.value = enabled ? 0.4 : 0;
-        if (enabled) {
-          const beatDuration = 60 / this.bpm;
-          this.delayNode.delayTime.value = beatDuration * value; // value = fraction (0.25 = 1/4)
-        }
+        // value = amount: wet level and feedback rise together.
+        this.delayWet.gain.value = enabled ? Math.min(1, value) * 0.6 : 0;
+        this.delayFeedback.gain.value = enabled ? 0.15 + Math.min(1, value) * 0.4 : 0;
+        this.syncDelayTime();
         break;
       }
       case 'chorus':

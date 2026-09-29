@@ -1,42 +1,38 @@
 import type { Note } from '@/music/types';
 import type { ADSREnvelope, AnalogWaveform } from './types';
-
-interface Voice {
-  oscL: OscillatorNode;
-  oscR: OscillatorNode;
-  gainL: GainNode;
-  gainR: GainNode;
-  panL: StereoPannerNode;
-  panR: StereoPannerNode;
-}
+import { applyAttack, voiceLevel } from './envelope';
+import { VoiceSet } from './voice-set';
 
 export class AnalogSynth {
   private ctx: BaseAudioContext;
   private output: AudioNode;
-  private voices: Voice[] = [];
-  private activeVoices: Voice[] = [];
+  private voices: VoiceSet;
 
   constructor(ctx: BaseAudioContext, output: AudioNode) {
     this.ctx = ctx;
     this.output = output;
+    this.voices = new VoiceSet(ctx);
   }
 
   getVoiceCount(): number {
     return 6;
   }
 
-  trigger(notes: Note[], adsr: ADSREnvelope, waveform: AnalogWaveform): void {
-    this.stop();
-    const now = this.ctx.currentTime;
-    const attackEnd = now + adsr.attack / 1000;
-    const decayEnd = attackEnd + adsr.decay / 1000;
+  /**
+   * Plays `notes` at `when` (default: now), cutting whatever this synth was
+   * holding. `spread` staggers note starts in seconds (strum).
+   */
+  trigger(notes: Note[], adsr: ADSREnvelope, waveform: AnalogWaveform, when?: number, spread = 0): void {
+    const now = Math.max(when ?? 0, this.ctx.currentTime);
+    this.voices.cut(now);
+    const count = Math.min(notes.length, 6);
+    const level = voiceLevel(count);
 
-    for (let i = 0; i < Math.min(notes.length, 6); i++) {
+    for (let i = 0; i < count; i++) {
       const note = notes[i];
-      if (!note) continue;
-      const panValue = notes.length > 1
-        ? -0.5 + (i / (notes.length - 1)) * 1.0
-        : 0;
+      if (!note || !Number.isFinite(note.frequency)) continue;
+      const start = now + i * spread;
+      const panValue = count > 1 ? -0.5 + (i / (count - 1)) * 1.0 : 0;
 
       const oscL = this.createOsc(note.frequency, waveform);
       const oscR = this.createOsc(note.frequency, waveform);
@@ -44,66 +40,25 @@ export class AnalogSynth {
 
       const gainL = this.ctx.createGain();
       const gainR = this.ctx.createGain();
-      const panL = this.createPanner(panValue - 0.15);
-      const panR = this.createPanner(panValue + 0.15);
+      applyAttack(gainL.gain, adsr, start, level);
+      applyAttack(gainR.gain, adsr, start, level);
 
-      // ADSR envelope
-      gainL.gain.setValueAtTime(0, now);
-      gainL.gain.linearRampToValueAtTime(1, attackEnd);
-      gainL.gain.linearRampToValueAtTime(adsr.sustain, decayEnd);
-      gainR.gain.setValueAtTime(0, now);
-      gainR.gain.linearRampToValueAtTime(1, attackEnd);
-      gainR.gain.linearRampToValueAtTime(adsr.sustain, decayEnd);
+      oscL.connect(gainL).connect(this.createPanner(panValue - 0.15)).connect(this.output);
+      oscR.connect(gainR).connect(this.createPanner(panValue + 0.15)).connect(this.output);
 
-      oscL.connect(gainL).connect(panL).connect(this.output);
-      oscR.connect(gainR).connect(panR).connect(this.output);
+      oscL.start(start);
+      oscR.start(start);
 
-      oscL.start(now);
-      oscR.start(now);
-
-      this.activeVoices.push({ oscL, oscR, gainL, gainR, panL, panR });
+      this.voices.add({ gains: [gainL.gain, gainR.gain], sources: [oscL, oscR] });
     }
   }
 
-  release(adsr: ADSREnvelope): void {
-    const releasingVoices = [...this.activeVoices];
-    this.activeVoices = [];
-
-    const now = this.ctx.currentTime;
-    const releaseEnd = now + adsr.release / 1000;
-
-    for (const voice of releasingVoices) {
-      voice.gainL.gain.cancelScheduledValues(now);
-      voice.gainL.gain.setValueAtTime(voice.gainL.gain.value, now);
-      voice.gainL.gain.linearRampToValueAtTime(0, releaseEnd);
-      voice.gainR.gain.cancelScheduledValues(now);
-      voice.gainR.gain.setValueAtTime(voice.gainR.gain.value, now);
-      voice.gainR.gain.linearRampToValueAtTime(0, releaseEnd);
-
-      voice.oscL.stop(releaseEnd + 0.01);
-      voice.oscR.stop(releaseEnd + 0.01);
-    }
-
-    setTimeout(() => {
-      releasingVoices.length = 0;
-    }, adsr.release + 50);
+  release(adsr: ADSREnvelope, when?: number): void {
+    this.voices.release(adsr.release, Math.max(when ?? 0, this.ctx.currentTime));
   }
 
-  stop(): void {
-    const now = this.ctx.currentTime;
-    for (const voice of this.activeVoices) {
-      try {
-        voice.gainL.gain.cancelScheduledValues(now);
-        voice.gainL.gain.setValueAtTime(0, now);
-        voice.gainR.gain.cancelScheduledValues(now);
-        voice.gainR.gain.setValueAtTime(0, now);
-        voice.oscL.stop(now + 0.005);
-        voice.oscR.stop(now + 0.005);
-      } catch {
-        // oscillator already stopped
-      }
-    }
-    this.activeVoices = [];
+  stop(when?: number): void {
+    this.voices.cut(Math.max(when ?? 0, this.ctx.currentTime));
   }
 
   private createOsc(frequency: number, waveform: AnalogWaveform): OscillatorNode {

@@ -34,6 +34,7 @@ function makeMockClock() {
     stop: vi.fn(),
     setBpm: vi.fn(),
     setRate: vi.fn(),
+    getStepDuration: vi.fn(() => 0.25),
     onTick: vi.fn((cb: (time: number, step: number) => void) => {
       tickCallback = cb;
       const unsub = vi.fn();
@@ -92,7 +93,7 @@ describe('PlayModeHandler', () => {
   });
 
   describe('strum mode', () => {
-    it('plays notes sequentially with delays based on strum speed', () => {
+    it('plays the chord once with notes staggered by the strum interval', () => {
       const engine = makeMockEngine();
       const { clock } = makeMockClock();
       const arp = makeMockArpeggiator();
@@ -102,17 +103,9 @@ describe('PlayModeHandler', () => {
       handler.setStrumSpeed('fast'); // 15ms interval
       handler.handleChordDown(voicing);
 
-      // First note fires immediately
+      // One trigger with all notes; the engine staggers their start times.
       expect(engine.triggerChord).toHaveBeenCalledTimes(1);
-      expect((engine.triggerChord as any).mock.calls[0][0].notes).toHaveLength(1);
-
-      vi.advanceTimersByTime(15);
-      expect(engine.triggerChord).toHaveBeenCalledTimes(2);
-      expect((engine.triggerChord as any).mock.calls[1][0].notes).toHaveLength(2);
-
-      vi.advanceTimersByTime(15);
-      expect(engine.triggerChord).toHaveBeenCalledTimes(3);
-      expect((engine.triggerChord as any).mock.calls[2][0].notes).toHaveLength(3);
+      expect(engine.triggerChord).toHaveBeenCalledWith(voicing, undefined, 0.015);
     });
 
     it('uses slow strum interval (80ms)', () => {
@@ -124,12 +117,7 @@ describe('PlayModeHandler', () => {
       handler.setMode('strum');
       handler.setStrumSpeed('slow');
       handler.handleChordDown(voicing);
-      expect(engine.triggerChord).toHaveBeenCalledTimes(1);
-
-      vi.advanceTimersByTime(79);
-      expect(engine.triggerChord).toHaveBeenCalledTimes(1);
-      vi.advanceTimersByTime(1);
-      expect(engine.triggerChord).toHaveBeenCalledTimes(2);
+      expect(engine.triggerChord).toHaveBeenCalledWith(voicing, undefined, 0.08);
     });
 
     it('releases and cancels pending strum notes on chord up', () => {
@@ -194,7 +182,7 @@ describe('PlayModeHandler', () => {
       expect(engine.releaseChord).not.toHaveBeenCalled();
     });
 
-    it('releases previous drone and triggers new chord on next chord down', () => {
+    it('replaces the drone with the new chord on next chord down', () => {
       const engine = makeMockEngine();
       const { clock } = makeMockClock();
       const arp = makeMockArpeggiator();
@@ -207,7 +195,7 @@ describe('PlayModeHandler', () => {
       const secondVoicing: ChordVoicing = { ...voicing, displayName: 'G' };
       handler.handleChordDown(secondVoicing);
 
-      expect(engine.releaseChord).toHaveBeenCalledTimes(1);
+      // The engine cuts the previous chord itself when a new one triggers.
       expect(engine.triggerChord).toHaveBeenCalledTimes(2);
       expect(engine.triggerChord).toHaveBeenLastCalledWith(secondVoicing);
     });
@@ -227,10 +215,13 @@ describe('PlayModeHandler', () => {
 
       fireTick(0, 0);
       expect(engine.triggerChord).toHaveBeenCalledTimes(1);
-      expect(engine.triggerChord).toHaveBeenCalledWith(voicing);
+      // Scheduled at the tick's audio time, then gated off half a step later.
+      expect(engine.triggerChord).toHaveBeenCalledWith(voicing, 0);
+      expect(engine.releaseChord).toHaveBeenLastCalledWith(0.125);
 
       fireTick(0.5, 1);
       expect(engine.triggerChord).toHaveBeenCalledTimes(2);
+      expect(engine.triggerChord).toHaveBeenLastCalledWith(voicing, 0.5);
     });
 
     it('stops the clock and releases on chord up', () => {
@@ -242,10 +233,12 @@ describe('PlayModeHandler', () => {
       handler.setMode('repeat');
       handler.handleChordDown(voicing);
       fireTick(0, 0);
+      (engine.releaseChord as any).mockClear();
       handler.handleChordUp();
 
       expect(clock.stop).toHaveBeenCalledTimes(1);
       expect(engine.releaseChord).toHaveBeenCalledTimes(1);
+      expect(engine.releaseChord).toHaveBeenCalledWith();
       expect(unsubscribers[0]).toHaveBeenCalledTimes(1);
     });
   });
@@ -306,6 +299,7 @@ describe('PlayModeHandler', () => {
       handler.setMode('arpeggio');
       handler.handleChordDown(voicing);
       fireTick(0, 0);
+      (engine.releaseChord as any).mockClear();
       handler.handleChordUp();
 
       expect(clock.stop).toHaveBeenCalledTimes(1);
@@ -326,6 +320,36 @@ describe('PlayModeHandler', () => {
       expect(arp.setRate).toHaveBeenCalledWith('1/16');
       expect(arp.setChordMode).toHaveBeenCalledWith('chordPlusArp');
       expect(clock.setRate).toHaveBeenCalledWith('1/16');
+    });
+  });
+
+  describe('updateChord', () => {
+    it('keeps the arp running and swaps its chord instead of restarting', () => {
+      const engine = makeMockEngine();
+      const { clock } = makeMockClock();
+      const arp = makeMockArpeggiator();
+      const handler = new PlayModeHandler(engine, clock, arp);
+
+      handler.setMode('arpeggio');
+      handler.handleChordDown(voicing);
+      const next: ChordVoicing = { ...voicing, displayName: 'G' };
+      handler.updateChord(next);
+
+      expect(clock.start).toHaveBeenCalledTimes(1);
+      expect(clock.stop).not.toHaveBeenCalled();
+      expect(arp.setChord).toHaveBeenLastCalledWith(next);
+    });
+
+    it('retriggers immediately in play mode', () => {
+      const engine = makeMockEngine();
+      const { clock } = makeMockClock();
+      const arp = makeMockArpeggiator();
+      const handler = new PlayModeHandler(engine, clock, arp);
+
+      handler.handleChordDown(voicing);
+      const next: ChordVoicing = { ...voicing, displayName: 'G' };
+      handler.updateChord(next);
+      expect(engine.triggerChord).toHaveBeenLastCalledWith(next);
     });
   });
 

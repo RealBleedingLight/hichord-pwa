@@ -4,14 +4,16 @@ import type { CSSProperties } from 'react';
 import { CYBER } from '@/theme';
 
 export function sectionLabelStyle(accent: string): CSSProperties {
-  let color = '#666';
+  let color = '#9a9a9a';
   if (accent === CYBER.primary) {
-    color = '#662222';
+    color = '#e06a80';
   } else if (accent === CYBER.amber) {
-    color = '#665520';
+    color = '#c9a84a';
+  } else if (accent === CYBER.secondary) {
+    color = '#5fc9d6';
   }
   return {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 700,
     color,
     letterSpacing: 0.5,
@@ -34,7 +36,7 @@ export const rowStyle: CSSProperties = {
 };
 
 export function chipStyle(active: boolean, accent: string): CSSProperties {
-  let color = '#888';
+  let color = '#b8b8b8';
   let boxShadow = 'none';
   if (active) {
     if (accent === CYBER.primary) {
@@ -54,10 +56,10 @@ export function chipStyle(active: boolean, accent: string): CSSProperties {
     padding: '6px 10px',
     borderRadius: 4,
     border: 'none',
-    background: active ? accent : '#1a1a1a',
+    background: active ? accent : '#1e1e1e',
     color,
     boxShadow,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 700,
     cursor: 'pointer',
     touchAction: 'manipulation',

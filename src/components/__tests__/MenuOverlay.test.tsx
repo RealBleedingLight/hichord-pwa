@@ -43,7 +43,7 @@ describe('MenuOverlay', () => {
     useAppStore.setState({ activeOverlay: 'gray' });
     render(<MenuOverlay />);
     for (const key of ALL_KEYS) {
-      expect(screen.getByText(key)).toBeTruthy();
+      expect(screen.getByRole('button', { name: key })).toBeTruthy();
     }
   });
 
@@ -51,8 +51,10 @@ describe('MenuOverlay', () => {
     useAppStore.setState({ activeOverlay: 'yellow', synthMode: 'fm' });
     render(<MenuOverlay />);
     expect(screen.getByText('ANALOG')).toBeTruthy();
-    expect(screen.getByText(FM_PRESETS[0]!.name)).toBeTruthy();
-    expect(screen.getByText('REVERB')).toBeTruthy();
+    // Once as a factory preset, once in the FM preset row.
+    expect(screen.getAllByText(FM_PRESETS[0]!.name)).toHaveLength(2);
+    expect(screen.getByTestId('save-preset')).toBeTruthy();
+    expect(screen.getByLabelText('toggle REVERB')).toBeTruthy();
   });
 
   it('renders RedOverlay content when activeOverlay is red', () => {
@@ -73,7 +75,7 @@ describe('MenuOverlay', () => {
   it('clicking a key in GrayOverlay updates the store', () => {
     useAppStore.setState({ activeOverlay: 'gray' });
     render(<MenuOverlay />);
-    fireEvent.click(screen.getByText('G'));
+    fireEvent.click(screen.getByRole('button', { name: 'G' }));
     expect(useAppStore.getState().key).toBe('G');
   });
 

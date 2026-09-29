@@ -11,7 +11,7 @@ export function FunctionButtons() {
     {
       id: 'gray' as const,
       label: 'KEY',
-      color: '#999',
+      color: '#bbb',
       border: '1px solid rgba(136,136,136,.3)',
       textShadow: '0 0 8px rgba(170,170,170,.4)',
       activeBg: '#888',
@@ -43,11 +43,13 @@ export function FunctionButtons() {
             key={btn.id}
             onPointerDown={() => setHeld(btn.id, true)}
             onPointerUp={() => { setHeld(btn.id, false); setActiveOverlay(activeOverlay === btn.id ? null : btn.id); }}
+            onPointerCancel={() => setHeld(btn.id, false)}
             style={{
               background: active ? btn.activeBg : 'transparent',
               border: active ? 'none' : btn.border,
               borderRadius: 4,
-              padding: '4px 12px',
+              padding: '6px 14px',
+              minHeight: 32,
               color: active ? '#fff' : btn.color,
               fontSize: 11,
               fontWeight: 700,

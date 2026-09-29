@@ -1,4 +1,3 @@
-import type { LooperState } from './types';
 import { getLooperWorkletUrl } from './looper-worklet';
 
 export function calculateLoopLength(bars: number, bpm: number, sampleRate: number): number {
@@ -7,12 +6,20 @@ export function calculateLoopLength(bars: number, bpm: number, sampleRate: numbe
   return Math.round(bars * beatsPerBar * beatDuration * sampleRate);
 }
 
+export type LooperEvent =
+  | { type: 'recordingDone'; trackIndex: number }
+  | { type: 'recordingCancelled'; trackIndex: number }
+  | { type: 'position'; phase: number };
+
+/**
+ * Main-thread side of the looper worklet. All timing lives in the worklet;
+ * this class translates AudioContext times into frames and forwards events.
+ */
 export class LooperController {
   private ctx: AudioContext;
   private workletNode: AudioWorkletNode | null = null;
-  private state: LooperState = 'off';
   private initialized = false;
-  private onStateChange: ((state: LooperState, trackIndex?: number) => void) | null = null;
+  private listeners: ((e: LooperEvent) => void)[] = [];
 
   constructor(ctx: AudioContext) {
     this.ctx = ctx;
@@ -27,14 +34,22 @@ export class LooperController {
       numberOfInputs: 1,
       numberOfOutputs: 1,
       outputChannelCount: [2],
+      channelCount: 2,
+      channelCountMode: 'explicit',
     });
     this.workletNode.port.onmessage = (e) => {
-      if (e.data.type === 'recordingDone') {
-        this.state = 'looping';
-        this.onStateChange?.('looping', e.data.trackIndex);
-      }
+      for (const l of this.listeners) l(e.data as LooperEvent);
     };
     this.initialized = true;
+  }
+
+  isReady(): boolean {
+    return this.initialized;
+  }
+
+  onEvent(cb: (e: LooperEvent) => void): () => void {
+    this.listeners.push(cb);
+    return () => { this.listeners = this.listeners.filter((l) => l !== cb); };
   }
 
   connectInput(source: AudioNode): void {
@@ -45,28 +60,35 @@ export class LooperController {
     this.workletNode!.connect(dest);
   }
 
-  startRecording(trackIndex: number, loopLengthSamples: number): void {
-    this.state = 'recording';
+  private toFrame(time: number | undefined): number {
+    return Math.round((time ?? this.ctx.currentTime) * this.ctx.sampleRate);
+  }
+
+  /**
+   * Records one loop cycle on `trackIndex`, starting at AudioContext time
+   * `startAt`. The first track recorded sets the loop to `loopLengthSamples`;
+   * later tracks follow the existing loop.
+   */
+  startRecording(trackIndex: number, loopLengthSamples: number, startAt?: number): void {
     this.workletNode?.port.postMessage({
       type: 'startRecord',
       trackIndex,
       loopLength: loopLengthSamples,
+      startFrame: this.toFrame(startAt),
     });
   }
 
   stopRecording(trackIndex: number): void {
     this.workletNode?.port.postMessage({ type: 'stopRecord', trackIndex });
-    this.state = 'looping';
   }
 
-  togglePlayback(): void {
-    if (this.state === 'looping') {
-      this.workletNode?.port.postMessage({ type: 'stop' });
-      this.state = 'off';
-    } else {
-      this.workletNode?.port.postMessage({ type: 'play' });
-      this.state = 'looping';
-    }
+  /** Restarts loop playback from the top at `startAt`. */
+  play(startAt?: number): void {
+    this.workletNode?.port.postMessage({ type: 'play', startFrame: this.toFrame(startAt) });
+  }
+
+  stop(): void {
+    this.workletNode?.port.postMessage({ type: 'stop' });
   }
 
   setTrackGain(trackIndex: number, gain: number): void {
@@ -87,14 +109,5 @@ export class LooperController {
 
   clearAll(): void {
     this.workletNode?.port.postMessage({ type: 'clearAll' });
-    this.state = 'off';
-  }
-
-  getState(): LooperState {
-    return this.state;
-  }
-
-  onStateChanged(cb: (state: LooperState, trackIndex?: number) => void): void {
-    this.onStateChange = cb;
   }
 }
