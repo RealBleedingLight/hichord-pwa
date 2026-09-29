@@ -43,7 +43,9 @@ export function applyPresetToStore(preset: Preset): void {
   state.setSampleName(preset.sampleName);
   state.setAdsr(preset.adsr);
   for (const [type, settings] of Object.entries(preset.effects)) {
-    state.setEffect(type as keyof typeof preset.effects, settings);
+    // Presets saved before voice count was implemented stored an unused 1.0.
+    const fixed = type === 'voiceCount' && settings.value < 1.5 ? { enabled: false, value: 6 } : settings;
+    state.setEffect(type as keyof typeof preset.effects, fixed);
   }
   state.setKey(preset.key);
   state.setScale(preset.scale);

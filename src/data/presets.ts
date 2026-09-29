@@ -10,7 +10,7 @@ const defaultEffects: Record<EffectType, { enabled: boolean; value: number }> = 
   lfoVibrato: { enabled: false, value: 0.5 },
   glide: { enabled: false, value: 0.5 },
   stereo: { enabled: true, value: 0.7 },
-  voiceCount: { enabled: true, value: 1.0 },
+  voiceCount: { enabled: false, value: 6 },
 };
 
 function withEffects(overrides: Partial<Record<EffectType, { enabled: boolean; value: number }>>) {

@@ -104,6 +104,30 @@ class LooperProcessor extends AudioWorkletProcessor {
         if (this.masterTrackIndex() === -1) { this.loopLength = 0; this.playing = false; }
         break;
       }
+      case 'export':
+        this.port.postMessage({
+          type: 'exported',
+          requestId: msg.requestId,
+          loopLength: this.loopLength,
+          tracks: this.tracks.map((t) => t.hasAudio
+            ? { left: t.left.slice(), right: t.right.slice(), gain: t.gain, muted: t.muted }
+            : null),
+        });
+        break;
+      case 'import':
+        this.loopLength = msg.loopLength;
+        this.playing = false;
+        msg.tracks.forEach((data, i) => {
+          const t = this.tracks[i];
+          t.recording = false;
+          if (data && data.left.length === msg.loopLength) {
+            t.left = data.left; t.right = data.right; t.hasAudio = true;
+            t.gain = data.gain; t.muted = data.muted;
+          } else {
+            t.left = null; t.right = null; t.hasAudio = false;
+          }
+        });
+        break;
       case 'clearAll':
         for (const t of this.tracks) { t.left = null; t.right = null; t.hasAudio = false; t.recording = false; }
         this.loopLength = 0;

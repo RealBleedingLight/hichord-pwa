@@ -25,9 +25,20 @@ export interface LooperViewProps {
   onTrackMuteToggle?: (trackIndex: number) => void;
   onTrackClear?: (trackIndex: number) => void;
   onClearAll?: () => void;
+  /** Downloads the loop mix as a WAV, repeated n times. */
+  onExport?: (repeats: number) => void;
 }
 
-export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteToggle, onTrackClear, onClearAll }: LooperViewProps) {
+const MIX_CHANNELS: { key: 'synth' | 'beat' | 'loops'; label: string }[] = [
+  { key: 'synth', label: 'SYNTH' },
+  { key: 'beat', label: 'BEAT' },
+  { key: 'loops', label: 'LOOPS' },
+];
+
+export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteToggle, onTrackClear, onClearAll, onExport }: LooperViewProps) {
+  const mix = useAppStore((s) => s.mix);
+  const setMix = useAppStore((s) => s.setMix);
+  const bpm = useAppStore((s) => s.bpm);
   const looperTracks = useAppStore((s) => s.looperTracks);
   const activeTrack = useAppStore((s) => s.activeTrack);
   const setActiveTrack = useAppStore((s) => s.setActiveTrack);
@@ -40,18 +51,18 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
   const hasAudio = looperTracks.some((t) => t.state === 'playing' || t.state === 'muted');
 
   const small: React.CSSProperties = {
-    minWidth: 32, minHeight: 32, borderRadius: 6, border: 'none', cursor: 'pointer',
+    minWidth: 30, minHeight: 28, borderRadius: 6, border: 'none', cursor: 'pointer',
     fontSize: 11, fontWeight: 700, touchAction: 'manipulation',
   };
 
   return (
     <div style={{
-      width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: 6, padding: 8, overflow: 'auto',
+      width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: 5, padding: 8, overflow: 'auto',
       background: CYBER.panel, border: '1px solid ' + CYBER.border, borderRadius: 8,
     }}>
-      <div style={{ fontSize: 11, color: CYBER.textDim }}>
+      <div style={{ fontSize: 10, color: CYBER.textDim, lineHeight: 1.3 }}>
         {hasAudio
-          ? 'New tracks record one full loop and stay in sync. Tap a track to select it.'
+          ? `New tracks record one full loop and stay in sync. Tempo is locked at ${bpm} BPM while loops exist. Loops are saved on this device.`
           : `The first recording sets the loop length (${looperBars} bar${looperBars > 1 ? 's' : ''}). ${metronomeOn ? '1 bar count-in.' : ''}`}
       </div>
       <div style={{ height: 4, background: '#2a1010', borderRadius: 2, overflow: 'hidden' }}>
@@ -68,8 +79,8 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              minHeight: 36,
-              padding: '2px 6px',
+              minHeight: 30,
+              padding: '1px 6px',
               borderRadius: 6,
               border: activeTrack === track.index ? `2px solid ${ACCENT}` : '2px solid transparent',
               background: STATE_COLORS[track.state] ?? '#1a0808',
@@ -114,7 +125,7 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
           aria-label="Record"
           onClick={() => onRecordToggle(activeTrack)}
           style={{
-            minWidth: 44, minHeight: 44, borderRadius: '50%', border: 'none',
+            minWidth: 38, minHeight: 38, borderRadius: '50%', border: 'none',
             background: looperState === 'recording' || looperState === 'waiting' ? CYBER.primary : '#1a0808',
             color: looperState === 'recording' || looperState === 'waiting' ? '#fff' : CYBER.primary,
             fontSize: 18, cursor: 'pointer',
@@ -127,7 +138,7 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
           aria-label="Play"
           onClick={onPlayToggle}
           style={{
-            minWidth: 44, minHeight: 44, borderRadius: 8, border: 'none',
+            minWidth: 38, minHeight: 38, borderRadius: 8, border: 'none',
             background: looperState === 'looping' ? CYBER.green : '#1a0808',
             color: looperState === 'looping' ? '#111' : '#eee',
             fontSize: 18, cursor: 'pointer',
@@ -139,7 +150,7 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
           data-testid="looper-stop"
           aria-label="Stop"
           onClick={onStop}
-          style={{ minWidth: 44, minHeight: 44, borderRadius: 8, border: 'none', background: '#1a0808', color: '#eee', fontSize: 18, cursor: 'pointer' }}
+          style={{ minWidth: 38, minHeight: 38, borderRadius: 8, border: 'none', background: '#1a0808', color: '#eee', fontSize: 18, cursor: 'pointer' }}
         >
           ■
         </button>
@@ -169,6 +180,18 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
           </button>
         ))}
         <span style={{ width: 10 }} />
+        {onExport && (
+          <>
+            <button data-testid="export-wav" onClick={() => onExport(1)} disabled={!hasAudio}
+              style={{ ...small, padding: '0 10px', background: '#1a0808', color: hasAudio ? CYBER.secondary : '#555' }}>
+              ⤓ WAV
+            </button>
+            <button onClick={() => onExport(4)} disabled={!hasAudio}
+              style={{ ...small, padding: '0 10px', background: '#1a0808', color: hasAudio ? CYBER.secondary : '#555' }}>
+              ⤓ ×4
+            </button>
+          </>
+        )}
         <button
           onClick={() => setMetronome(!metronomeOn)}
           aria-pressed={metronomeOn}
@@ -176,6 +199,20 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
         >
           CLICK {metronomeOn ? 'ON' : 'OFF'}
         </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, fontSize: 10 }}>
+        {MIX_CHANNELS.map(({ key, label }) => (
+          <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 2, color: CYBER.textDim, letterSpacing: 1 }}>
+            <span>{label} <span style={{ color: CYBER.textLight }}>{Math.round(mix[key] * 100)}%</span></span>
+            <input
+              type="range" min={0} max={1.5} step={0.01} value={mix[key]}
+              aria-label={`${label} level`}
+              onChange={(e) => setMix(key, parseFloat(e.target.value))}
+              style={{ width: '100%', touchAction: 'none', margin: 0 }}
+            />
+          </label>
+        ))}
       </div>
     </div>
   );

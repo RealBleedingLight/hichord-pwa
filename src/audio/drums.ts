@@ -256,6 +256,13 @@ export class DrumEngine {
     source.start(Math.max(when, this.ctx.currentTime));
   }
 
+  /** Replaces one sound of the USER kit with a loaded sample (null restores the synth sound). */
+  setUserSample(sound: DrumSound, buffer: AudioBuffer | null): void {
+    if (!this.kits.has('user')) this.loadSynthKit('user');
+    const kit = this.kits.get('user')!;
+    kit.set(sound, buffer ?? this.renderDrum(sound, KIT_PARAMS.user));
+  }
+
   setKit(kit: DrumKitName): void {
     this.currentKit = kit;
     if (!this.kits.has(kit)) {

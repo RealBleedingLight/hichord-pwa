@@ -22,6 +22,8 @@ export class MasterClock {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private callbacks: TickCallback[] = [];
   private currentRate: ArpRate = '1/8';
+  /** Fraction of a step that every odd step is delayed by (0 = straight). */
+  private swing = 0;
   private ctx: BaseAudioContext | null = null;
 
   private scheduleAhead = 0.1; // 100ms lookahead
@@ -38,6 +40,17 @@ export class MasterClock {
   getBpm(): number { return this.bpm; }
 
   setRate(rate: ArpRate): void { this.currentRate = rate; }
+
+  /**
+   * Straight = 0; 1/3 gives the classic triplet shuffle (long-short pairs).
+   * The swing8/swing16 rates imply 1/3 on their own.
+   */
+  setSwing(amount: number): void { this.swing = Math.max(0, Math.min(0.5, amount)); }
+
+  private swingAmount(): number {
+    if (this.currentRate === 'swing8' || this.currentRate === 'swing16') return Math.max(this.swing, 1 / 3);
+    return this.swing;
+  }
 
   setContext(ctx: BaseAudioContext): void { this.ctx = ctx; }
 
@@ -83,8 +96,9 @@ export class MasterClock {
   private schedule(): void {
     if (!this.ctx || !this.running) return;
     while (this.nextStepTime < this.ctx.currentTime + this.scheduleAhead) {
+      const offset = this.step % 2 === 1 ? this.swingAmount() * this.getStepDuration() : 0;
       for (const cb of this.callbacks) {
-        cb(this.nextStepTime, this.step);
+        cb(this.nextStepTime + offset, this.step);
       }
       this.step++;
       this.nextStepTime += this.getStepDuration();

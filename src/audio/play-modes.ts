@@ -1,9 +1,11 @@
-import type { ChordVoicing } from '@/music/types';
+import type { ChordVoicing, Note } from '@/music/types';
 import type { AudioEngine } from './engine';
 import type { MasterClock } from './clock';
 import type { Arpeggiator } from './arpeggiator';
 import type { PlayMode, StrumSpeed, ArpPattern, ArpRate, ArpChordMode } from './types';
 import { STRUM_INTERVALS } from './types';
+
+const up12 = (n: Note): Note => ({ ...n, midi: n.midi + 12, frequency: n.frequency * 2, octave: n.octave + 1 });
 
 /** Fraction of a clock step that repeat/arp notes sound for (the rest is gap). */
 const REPEAT_GATE = 0.5;
@@ -80,13 +82,30 @@ export class PlayModeHandler {
   updateChord(voicing: ChordVoicing): void {
     if (this.mode === 'arpeggio' && this.tickUnsubscribe) {
       this.arpeggiator.setChord(voicing);
+      if (this.bedVoicing) this.bedVoicing = voicing;
+      if (this.arpChordMode() === 'chordPlusArp') this.morphOrTrigger(voicing, 'bed');
       return;
     }
     if (this.mode === 'repeat' && this.tickUnsubscribe) {
       this.repeatVoicing = voicing;
       return;
     }
+    if ((this.mode === 'play' || this.mode === 'drone') && this.canMorph()) {
+      this.morphOrTrigger(voicing, 'live');
+      return;
+    }
     this.handleChordDown(voicing);
+  }
+
+  private canMorph(): boolean {
+    const engine = this.engine as AudioEngine & { prefersMorph?: () => boolean };
+    return typeof engine.prefersMorph === 'function' && engine.prefersMorph();
+  }
+
+  private morphOrTrigger(voicing: ChordVoicing, group: 'live' | 'bed'): void {
+    const engine = this.engine as AudioEngine & { morphChord?: AudioEngine['morphChord'] };
+    if (typeof engine.morphChord === 'function') engine.morphChord(voicing, group);
+    else this.engine.triggerChord(voicing, undefined, 0, group);
   }
 
   handleChordUp(): void {
@@ -141,16 +160,42 @@ export class PlayModeHandler {
     this.clock.start();
   }
 
+  private arpChordMode(): ArpChordMode {
+    const arp = this.arpeggiator as Arpeggiator & { getChordMode?: () => ArpChordMode };
+    return typeof arp.getChordMode === 'function' ? arp.getChordMode() : 'arpOnly';
+  }
+
   private handleArpeggioDown(voicing: ChordVoicing): void {
     this.stopClockDrivenMode();
     this.arpeggiator.setChord(voicing);
+    const chordMode = this.arpChordMode();
+    this.bedVoicing = chordMode === 'arpOnly' ? null : voicing;
+    // CHORD+ARP: the chord sustains underneath while the arp runs an octave up.
+    if (chordMode === 'chordPlusArp') this.engine.triggerChord(voicing, undefined, 0, 'bed');
+    const layered = chordMode !== 'arpOnly';
+
     this.tickUnsubscribe = this.clock.onTick((time, step) => {
+      const step_ = this.stepSeconds();
+      // RHYTHM+ARP: the chord pulses on every beat under the arp.
+      if (chordMode === 'rhythmPlusArp' && this.bedVoicing && step % this.stepsPerBeat() === 0) {
+        this.engine.triggerChord(this.bedVoicing, time, 0, 'bed');
+        this.engine.releaseChord(time + step_ * this.stepsPerBeat() * 0.5, 'bed');
+      }
       const notes = this.arpeggiator.getNextNote(step);
       if (notes.length === 0) return;
-      this.engine.triggerChord({ ...voicing, bass: null, notes }, time);
-      this.engine.releaseChord(time + this.stepSeconds() * ARP_GATE);
+      this.engine.triggerChord({ ...voicing, bass: null, notes: layered ? notes.map(up12) : notes }, time);
+      this.engine.releaseChord(time + step_ * ARP_GATE);
     });
     this.clock.start();
+  }
+
+  private bedVoicing: ChordVoicing | null = null;
+
+  /** Clock steps per quarter note at the current rate (at least 1). */
+  private stepsPerBeat(): number {
+    const clock = this.clock as MasterClock & { getStepDuration?: (r?: ArpRate) => number };
+    if (typeof clock.getStepDuration !== 'function') return 1;
+    return Math.max(1, Math.round(clock.getStepDuration('1/4') / clock.getStepDuration()));
   }
 
   private stepSeconds(): number {
@@ -164,6 +209,10 @@ export class PlayModeHandler {
       this.tickUnsubscribe = null;
       this.clock.stop();
       this.repeatVoicing = null;
+      if (this.bedVoicing) {
+        this.engine.releaseChord(undefined, 'bed');
+        this.bedVoicing = null;
+      }
       if (this.mode === 'arpeggio') {
         this.arpeggiator.reset();
       }

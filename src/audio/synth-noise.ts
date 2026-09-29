@@ -17,6 +17,7 @@ export class NoiseSynth {
   private output: AudioNode;
   private voices: VoiceSet;
   private initialized = false;
+  private maxNotes = 6;
 
   constructor(ctx: BaseAudioContext, output: AudioNode) {
     this.ctx = ctx;
@@ -36,6 +37,10 @@ export class NoiseSynth {
     this.initialized = true;
   }
 
+  setShaping(shaping: { maxNotes: number }): void {
+    this.maxNotes = shaping.maxNotes;
+  }
+
   isReady(): boolean {
     return this.initialized;
   }
@@ -52,7 +57,7 @@ export class NoiseSynth {
     envGain.connect(this.output);
     const filters: BiquadFilterNode[] = [];
 
-    const pitched = notes.filter((n) => Number.isFinite(n.frequency)).slice(0, 6);
+    const pitched = notes.filter((n) => Number.isFinite(n.frequency)).slice(0, Math.min(6, this.maxNotes));
     if (pitched.length > 0) {
       // Narrow band-passes pass very little energy, so make up the gain.
       applyAttack(envGain.gain, adsr, now, 6 / Math.sqrt(pitched.length));

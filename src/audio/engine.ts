@@ -7,13 +7,18 @@ import { SampleSynth } from './synth-sample';
 import { NoiseSynth } from './synth-noise';
 import { EffectsChain } from './effects';
 import { INSTRUMENT_ROOT_MIDI, isBuiltinInstrument, renderInstrument } from './instruments';
+import { DEFAULT_SHAPING, type VoiceShaping } from './shaping';
+import { smoothSet } from './envelope';
+import { Vocoder } from './vocoder';
 
 /**
  * Independent voice pools. 'live' is what the player's hands trigger; 'seq'
  * is the chord sequencer — so a playing progression and live chords don't
  * cut each other off.
  */
-export type VoiceGroup = 'live' | 'seq';
+export type VoiceGroup = 'live' | 'seq' | 'bed';
+
+export type MixChannel = 'synth' | 'beat' | 'loops';
 
 interface SynthSet {
   analog: AnalogSynth;
@@ -42,6 +47,15 @@ export class AudioEngine {
   private looperReturn: GainNode;
   private analyser: AnalyserNode;
   private effectsInput: GainNode;
+  /** All synth voices land here; normally feeds the effects, or the vocoder when it's on. */
+  private synthBus: GainNode;
+  private synthOut: GainNode;
+  private vibratoLfo: OscillatorNode;
+  private vibratoDepth: GainNode;
+  private shaping: VoiceShaping = { ...DEFAULT_SHAPING };
+  private vocoder: Vocoder | null = null;
+  private vocoderActive = false;
+  private volume = 0.8;
   private effectsChain: EffectsChain;
   private groups = new Map<VoiceGroup, SynthSet>();
   private currentAdsr: ADSREnvelope = ADSR_PRESETS.TOUCH;
@@ -83,9 +97,22 @@ export class AudioEngine {
     this.drumBus.connect(this.mixBus);
 
     this.effectsChain = new EffectsChain(this.ctx);
-    this.effectsChain.connect(this.mixBus);
+    this.synthOut = this.ctx.createGain();
+    this.synthOut.connect(this.mixBus);
+    this.effectsChain.connect(this.synthOut);
     this.effectsInput = this.ctx.createGain();
     this.effectsInput.connect(this.effectsChain.getInput());
+    this.synthBus = this.ctx.createGain();
+    this.synthBus.connect(this.effectsInput);
+
+    // Shared vibrato LFO (in cents) — every oscillator's detune listens to it.
+    this.vibratoLfo = this.ctx.createOscillator();
+    this.vibratoLfo.frequency.value = 5.5;
+    this.vibratoDepth = this.ctx.createGain();
+    this.vibratoDepth.gain.value = 0;
+    this.vibratoLfo.connect(this.vibratoDepth);
+    try { this.vibratoLfo.start(); } catch { /* offline test contexts */ }
+    this.shaping.vibrato = this.vibratoDepth;
 
     this.group('live');
   }
@@ -94,11 +121,12 @@ export class AudioEngine {
     let set = this.groups.get(name);
     if (!set) {
       set = {
-        analog: new AnalogSynth(this.ctx, this.effectsInput),
-        fm: new FMSynth(this.ctx, this.effectsInput),
-        sample: new SampleSynth(this.ctx, this.effectsInput),
-        noise: new NoiseSynth(this.ctx, this.effectsInput),
+        analog: new AnalogSynth(this.ctx, this.synthBus),
+        fm: new FMSynth(this.ctx, this.synthBus),
+        sample: new SampleSynth(this.ctx, this.synthBus),
+        noise: new NoiseSynth(this.ctx, this.synthBus),
       };
+      this.applyShaping(set);
       set.noise.init().catch(() => { /* AudioWorklet unavailable — noise mode stays silent */ });
       this.groups.set(name, set);
     }
@@ -154,6 +182,35 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * Changes a held chord smoothly: analog/FM voices retune in place (shared
+   * notes keep ringing, no re-attack). Other synths just retrigger.
+   */
+  morphChord(voicing: ChordVoicing, group: VoiceGroup = 'live'): void {
+    const synths = this.group(group);
+    const allNotes = voicing.bass ? [voicing.bass, ...voicing.notes] : voicing.notes;
+    if (this.currentSynthMode === 'analog') synths.analog.morph(allNotes, this.currentAdsr);
+    else if (this.currentSynthMode === 'fm') synths.fm.morph(allNotes, this.currentAdsr);
+    else this.triggerChord(voicing, undefined, 0, group);
+  }
+
+  /** Whether chord changes should morph rather than re-attack (sustained sounds only). */
+  prefersMorph(): boolean {
+    return (this.currentSynthMode === 'analog' || this.currentSynthMode === 'fm') && this.currentAdsr.sustain >= 0.3;
+  }
+
+  private applyShaping(set: SynthSet): void {
+    set.analog.setShaping(this.shaping);
+    set.fm.setShaping(this.shaping);
+    set.sample.setShaping(this.shaping);
+    set.noise.setShaping(this.shaping);
+  }
+
+  private updateShaping(patch: Partial<VoiceShaping>): void {
+    this.shaping = { ...this.shaping, ...patch };
+    for (const set of this.groups.values()) this.applyShaping(set);
+  }
+
   /** Cuts every sounding voice (all synth types) in one group, or in all groups. */
   stopAll(group?: VoiceGroup): void {
     for (const [name, set] of this.groups) {
@@ -203,8 +260,42 @@ export class AudioEngine {
 
   getSampleSynth(): SampleSynth { return this.group('live').sample; }
   getNoiseSynth(): NoiseSynth { return this.group('live').noise; }
-  setMasterVolume(vol: number): void { this.masterGain.gain.value = vol; }
-  getMasterVolume(): number { return this.masterGain.gain.value; }
+  setMasterVolume(vol: number): void {
+    this.volume = vol;
+    smoothSet(this.masterGain.gain, vol, this.ctx);
+  }
+  getMasterVolume(): number { return this.volume; }
+
+  /** Balance between the synth, the beat and the looper playback. */
+  setMixLevel(channel: MixChannel, level: number): void {
+    const node = channel === 'synth' ? this.synthOut : channel === 'beat' ? this.drumBus : this.looperReturn;
+    smoothSet(node.gain, Math.max(0, Math.min(1.5, level)), this.ctx);
+  }
+
+  // --- Vocoder ---------------------------------------------------------------
+
+  /** Routes the synths through the vocoder (mic = modulator) or back to normal. */
+  setVocoderActive(active: boolean): void {
+    if (active === this.vocoderActive) return;
+    const vocoder = this.getVocoder();
+    this.synthBus.disconnect();
+    if (active) {
+      vocoder.connectSynthSource(this.synthBus);
+      vocoder.enable();
+    } else {
+      vocoder.disable();
+      this.synthBus.connect(this.effectsInput);
+    }
+    this.vocoderActive = active;
+  }
+
+  getVocoder(): Vocoder {
+    if (!this.vocoder) {
+      this.vocoder = new Vocoder(this.ctx, 16);
+      this.vocoder.getOutput().connect(this.effectsInput);
+    }
+    return this.vocoder;
+  }
   getContext(): BaseAudioContext { return this.ctx; }
   /** Input of the synth → effects path. */
   getOutputNode(): GainNode { return this.effectsInput; }
@@ -218,7 +309,23 @@ export class AudioEngine {
   getMonitorBus(): AudioNode { return this.limiter; }
   getAnalyser(): AnalyserNode { return this.analyser; }
   setEffect(type: EffectType, enabled: boolean, value: number): void {
-    this.effectsChain.setEffect(type, enabled, value);
+    switch (type) {
+      case 'lfoVibrato':
+        // value 0–1 → up to ±45 cents of vibrato
+        smoothSet(this.vibratoDepth.gain, enabled ? value * 45 : 0, this.ctx);
+        break;
+      case 'glide':
+        this.updateShaping({ glide: enabled ? 0.02 + value * 0.4 : 0 });
+        break;
+      case 'stereo':
+        this.updateShaping({ width: enabled ? value : DEFAULT_SHAPING.width });
+        break;
+      case 'voiceCount':
+        this.updateShaping({ maxNotes: enabled ? Math.max(1, Math.min(6, Math.round(value))) : 6 });
+        break;
+      default:
+        this.effectsChain.setEffect(type, enabled, value);
+    }
   }
   getEffectsChain(): EffectsChain { return this.effectsChain; }
 

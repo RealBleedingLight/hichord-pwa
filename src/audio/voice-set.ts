@@ -21,8 +21,18 @@ export class VoiceSet {
 
   constructor(private ctx: BaseAudioContext) {}
 
-  add(voice: Omit<VoiceHandle, 'releaseAt' | 'endAt'>): void {
-    this.voices.push({ ...voice, releaseAt: null, endAt: Infinity });
+  add(voice: Omit<VoiceHandle, 'releaseAt' | 'endAt'>): VoiceHandle {
+    const handle: VoiceHandle = { ...voice, releaseAt: null, endAt: Infinity };
+    this.voices.push(handle);
+    return handle;
+  }
+
+  /** Quickly fades one specific voice (used when a morphing chord loses a note). */
+  cutVoice(v: VoiceHandle, when: number): void {
+    if (v.releaseAt !== null && v.releaseAt <= when) return;
+    let end = when;
+    for (const g of v.gains) end = applyCut(g, when);
+    this.finish(v, when, end);
   }
 
   /** Starts the release of every held voice at `when`. */

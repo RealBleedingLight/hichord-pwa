@@ -27,7 +27,7 @@ export type EffectType =
 export type PlayMode =
   | 'play' | 'strum' | 'lead' | 'drone' | 'arpeggio' | 'repeat'
   | 'micSample' | 'drum' | 'drumLoops' | 'autoDrum'
-  | 'sequencer' | 'chordHiro' | 'earTrainer' | 'tuner' | 'mixer';
+  | 'sequencer' | 'chordHiro' | 'earTrainer' | 'tuner' | 'mixer' | 'vocoder';
 
 export type DrumKitName = 'tight' | 'x0x' | 'x9x' | 'lynn' | 'kr78' | 'trap' | 'user';
 

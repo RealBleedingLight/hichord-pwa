@@ -7,7 +7,7 @@ const ACCENT = CYBER.primary;
 const IN_TUNE_COLOR = '#2ecc71';
 const CENTS_RANGE = 50;
 
-export function Tuner() {
+export function Tuner({ getAudioContext }: { getAudioContext?: () => AudioContext | null } = {}) {
   const tunerRef = useRef<TunerEngine | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const [listening, setListening] = useState(false);
@@ -25,7 +25,7 @@ export function Tuner() {
     setError(null);
     try {
       const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = ctxRef.current ?? new AudioContextCtor();
+      const ctx = ctxRef.current ?? getAudioContext?.() ?? new AudioContextCtor();
       ctxRef.current = ctx;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -42,7 +42,7 @@ export function Tuner() {
       setError('Microphone access denied');
       setListening(false);
     }
-  }, []);
+  }, [getAudioContext]);
 
   const handleStop = useCallback(() => {
     tunerRef.current?.stop();

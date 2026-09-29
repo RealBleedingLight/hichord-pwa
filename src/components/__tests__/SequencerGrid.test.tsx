@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SequencerGrid } from '@/components/SequencerGrid';
-import { useAppStore, SEQUENCE_SLOTS } from '@/store';
+import { useAppStore, currentSection, SEQUENCE_SLOTS, SECTION_NAMES } from '@/store';
 
 describe('SequencerGrid', () => {
   beforeEach(() => {
@@ -11,7 +11,10 @@ describe('SequencerGrid', () => {
       scale: 'major',
       joystickMode: 'default',
       chordLocks: [],
-      sequence: Array.from({ length: SEQUENCE_SLOTS }, () => null),
+      sections: SECTION_NAMES.map(() => Array.from({ length: SEQUENCE_SLOTS }, () => null)),
+      editSection: 0,
+      songChain: [0],
+      songMode: false,
       selectedSlot: null,
       transportPlaying: false,
       transportStep: null,
@@ -45,14 +48,33 @@ describe('SequencerGrid', () => {
     useAppStore.getState().setSequenceSlot(0, { degree: 1, direction: 'center' });
     render(<SequencerGrid />);
     fireEvent.click(screen.getByTestId('sequencer-clear'));
-    expect(useAppStore.getState().sequence.every((s) => s === null)).toBe(true);
+    expect(currentSection(useAppStore.getState()).every((s) => s === null)).toBe(true);
   });
 
   it('the per-slot ✕ clears just that slot', () => {
     useAppStore.getState().setSequenceSlot(3, { degree: 4, direction: 'center' });
     render(<SequencerGrid />);
     fireEvent.click(screen.getByLabelText('Clear slot 4'));
-    expect(useAppStore.getState().sequence[3]).toBeNull();
+    expect(currentSection(useAppStore.getState())[3]).toBeNull();
+  });
+
+  it('section tabs switch which section is edited', () => {
+    useAppStore.getState().setSequenceSlot(0, { degree: 1, direction: 'center' });
+    render(<SequencerGrid />);
+    fireEvent.click(screen.getByTestId('section-B'));
+    expect(useAppStore.getState().editSection).toBe(1);
+    expect(screen.getByTestId('sequencer-step-0').textContent).not.toContain('C');
+  });
+
+  it('builds a song arrangement and toggles song mode', () => {
+    render(<SequencerGrid />);
+    fireEvent.click(screen.getByTestId('song-add-B'));
+    fireEvent.click(screen.getByTestId('song-add-A'));
+    expect(useAppStore.getState().songChain).toEqual([0, 1, 0]);
+    fireEvent.click(screen.getByLabelText('Remove B from song position 2'));
+    expect(useAppStore.getState().songChain).toEqual([0, 0]);
+    fireEvent.click(screen.getByTestId('song-mode'));
+    expect(useAppStore.getState().songMode).toBe(true);
   });
 
   it('play toggles the shared transport', () => {

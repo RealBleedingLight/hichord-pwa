@@ -1,3 +1,4 @@
+import { smoothSet } from './envelope';
 import type { EffectType } from './types';
 
 export class EffectsChain {
@@ -202,29 +203,29 @@ export class EffectsChain {
 
     switch (type) {
       case 'filter':
-        this.filterNode.frequency.value = enabled ? Math.max(20, Math.min(20000, value)) : 20000;
+        smoothSet(this.filterNode.frequency, enabled ? Math.max(20, Math.min(20000, value)) : 20000, this.ctx);
         break;
       case 'reverb':
-        this.reverbWet.gain.value = enabled ? value : 0;
+        smoothSet(this.reverbWet.gain, enabled ? value : 0, this.ctx);
         break;
       case 'delay': {
         // value = amount: wet level and feedback rise together.
-        this.delayWet.gain.value = enabled ? Math.min(1, value) * 0.6 : 0;
-        this.delayFeedback.gain.value = enabled ? 0.15 + Math.min(1, value) * 0.4 : 0;
+        smoothSet(this.delayWet.gain, enabled ? Math.min(1, value) * 0.6 : 0, this.ctx);
+        smoothSet(this.delayFeedback.gain, enabled ? 0.15 + Math.min(1, value) * 0.4 : 0, this.ctx);
         this.syncDelayTime();
         break;
       }
       case 'chorus':
-        this.chorusWet.gain.value = enabled ? value : 0;
+        smoothSet(this.chorusWet.gain, enabled ? value : 0, this.ctx);
         break;
       case 'flanger':
-        this.flangerWet.gain.value = enabled ? value : 0;
+        smoothSet(this.flangerWet.gain, enabled ? value : 0, this.ctx);
         break;
       case 'tremolo':
-        this.tremoloDepth.gain.value = enabled ? value : 0;
+        smoothSet(this.tremoloDepth.gain, enabled ? value : 0, this.ctx);
         break;
       case 'stereo':
-        this.stereoPanner.pan.value = 0; // stereo width handled by synth panners
+        smoothSet(this.stereoPanner.pan, 0, this.ctx); // stereo width handled by synth panners
         break;
       default:
         break;

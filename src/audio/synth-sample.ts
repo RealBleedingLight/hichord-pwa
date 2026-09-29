@@ -2,17 +2,24 @@ import type { Note } from '@/music/types';
 import type { ADSREnvelope } from './types';
 import { applyAttack, voiceLevel } from './envelope';
 import { VoiceSet } from './voice-set';
+import { DEFAULT_SHAPING, panFor, setPitch, type VoiceShaping } from './shaping';
 
 export class SampleSynth {
   private ctx: BaseAudioContext;
   private output: AudioNode;
   private voices: VoiceSet;
   private sampleCache: Map<string, AudioBuffer> = new Map();
+  private shaping: VoiceShaping = DEFAULT_SHAPING;
+  private lastRates: number[] = [];
 
   constructor(ctx: BaseAudioContext, output: AudioNode) {
     this.ctx = ctx;
     this.output = output;
     this.voices = new VoiceSet(ctx);
+  }
+
+  setShaping(shaping: VoiceShaping): void {
+    this.shaping = shaping;
   }
 
   async loadSample(url: string): Promise<AudioBuffer> {
@@ -36,31 +43,38 @@ export class SampleSynth {
   trigger(notes: Note[], adsr: ADSREnvelope, sampleBuffer: AudioBuffer, when?: number, rootMidi = 60, spread = 0): void {
     const now = Math.max(when ?? 0, this.ctx.currentTime);
     this.voices.cut(now);
-    const count = Math.min(notes.length, 6);
+    const playable = notes.filter((n) => n && Number.isFinite(n.midi)).slice(0, Math.min(6, this.shaping.maxNotes));
+    const count = playable.length;
     // Samples are normalised mono, so give them the same headroom as two oscillators.
     const level = voiceLevel(count) * 2;
+    const rates: number[] = [];
+    const vibrato = this.shaping.vibrato;
 
-    for (let i = 0; i < count; i++) {
-      const note = notes[i];
-      if (!note || !Number.isFinite(note.midi)) continue;
+    playable.forEach((note, i) => {
       const start = now + i * spread;
-      const pan = count > 1 ? -0.5 + (i / (count - 1)) : 0;
-
       const source = this.ctx.createBufferSource();
       source.buffer = sampleBuffer;
-      source.playbackRate.value = Math.pow(2, (note.midi - rootMidi) / 12);
+      const rate = Math.pow(2, (note.midi - rootMidi) / 12);
+      setPitch(source.playbackRate, rate, start, this.lastRates[i], this.shaping.glide);
+      rates.push(rate);
+      vibrato?.connect(source.detune);
 
       const envGain = this.ctx.createGain();
       applyAttack(envGain.gain, adsr, start, level);
 
       const panner = this.ctx.createStereoPanner();
-      panner.pan.value = Math.max(-1, Math.min(1, pan));
+      panner.pan.value = panFor(i, count, this.shaping.width);
 
       source.connect(envGain).connect(panner).connect(this.output);
       source.start(start);
 
-      this.voices.add({ gains: [envGain.gain], sources: [source] });
-    }
+      this.voices.add({
+        gains: [envGain.gain],
+        sources: [source],
+        dispose: vibrato ? () => { try { vibrato.disconnect(source.detune); } catch { /* gone */ } } : undefined,
+      });
+    });
+    this.lastRates = rates;
   }
 
   release(adsr: ADSREnvelope, when?: number): void {

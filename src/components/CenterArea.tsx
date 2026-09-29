@@ -8,6 +8,7 @@ import { MicSampleView } from './MicSampleView';
 import { ChordHiro } from './ChordHiro';
 import { EarTrainer } from './EarTrainer';
 import { ChordDisplay } from './ChordDisplay';
+import { VocoderView } from './VocoderView';
 import type { ChordVoicing } from '@/music/types';
 
 export interface CenterAreaProps {
@@ -17,9 +18,11 @@ export interface CenterAreaProps {
   onChordTrigger?: (voicing: ChordVoicing) => void;
   onSampleCaptured?: (buffer: AudioBuffer, pitchHz: number | null) => void;
   getAnalyser?: () => AnalyserNode | null;
+  /** The engine's AudioContext, so mic tools don't spin up their own. */
+  getAudioContext?: () => AudioContext | null;
 }
 
-export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps, onChordTrigger, onSampleCaptured, getAnalyser }: CenterAreaProps) {
+export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps, onChordTrigger, onSampleCaptured, getAnalyser, getAudioContext }: CenterAreaProps) {
   const mode = useAppStore((s) => s.playMode);
 
   if (mode === 'drum' || mode === 'drumLoops' || mode === 'autoDrum') {
@@ -35,11 +38,15 @@ export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps,
   }
 
   if (mode === 'tuner') {
-    return <Tuner />;
+    return <Tuner getAudioContext={getAudioContext} />;
   }
 
   if (mode === 'micSample') {
-    return <MicSampleView onSampleCaptured={onSampleCaptured} />;
+    return <MicSampleView onSampleCaptured={onSampleCaptured} getAudioContext={getAudioContext} />;
+  }
+
+  if (mode === 'vocoder') {
+    return <VocoderView />;
   }
 
   if (mode === 'chordHiro') {

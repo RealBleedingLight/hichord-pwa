@@ -3,7 +3,7 @@ import { useMemo, type CSSProperties } from 'react';
 import { useAppStore } from '@/store';
 import { ALL_KEYS } from '@/music/types';
 import type { ScaleName, BassMode, JoystickMode, Inversion } from '@/music/types';
-import { getDegreeLabels } from '@/music/chord-engine';
+import { getDegreeLabels, getChord, directionLabel } from '@/music/chord-engine';
 
 const INVERSION_LABELS = ['ROOT', '1ST INV', '2ND INV'];
 import { sectionLabelStyle, sectionStyle, rowStyle, chipStyle, stepperButtonStyle } from './shared';
@@ -73,6 +73,8 @@ export function GrayOverlay() {
   const inversions = useAppStore((s) => s.inversions);
   const setInversion = useAppStore((s) => s.setInversion);
   const degreeLabels = useMemo(() => getDegreeLabels(key, scale), [key, scale]);
+  const chordLocks = useAppStore((s) => s.chordLocks);
+  const toggleChordLock = useAppStore((s) => s.toggleChordLock);
 
   return (
     <div>
@@ -156,6 +158,26 @@ export function GrayOverlay() {
                   {INVERSION_LABELS[inv]}
                 </button>
               </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={sectionStyle}>
+        <div style={sectionLabelStyle(ACCENT)}>Chord locks <span style={{ textTransform: 'none', fontWeight: 400, color: '#999' }}>— hold a key + move the pad, then tap 🔒 LOCK (or E)</span></div>
+        <div style={rowStyle}>
+          {chordLocks.length === 0 && <span style={{ fontSize: 12, color: '#888' }}>None yet</span>}
+          {chordLocks.map((lock) => {
+            const chord = getChord(key, scale, lock.degree, 4, lock.direction, joystickMode, 0, 'off', []);
+            return (
+              <button
+                key={lock.degree}
+                aria-label={`Unlock ${chord.displayName}`}
+                style={grayChipStyle(true)}
+                onClick={() => toggleChordLock(lock.degree, lock.direction)}
+              >
+                🔒 {degreeLabels[lock.degree - 1]?.roman} → {chord.displayName} ({directionLabel(lock.direction, joystickMode)}) ✕
+              </button>
             );
           })}
         </div>

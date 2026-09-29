@@ -74,15 +74,39 @@ The product only needs to do one thing well: **get from "I have an idea" to "I'm
 - `tsc` clean, `vite build` passes, and **277 tests pass** (35 new or rewritten for the new behaviour).
 - In Chromium, measured audio: every instrument and mode produces sound, and no path clips. Stopping the transport and releasing keys goes to true silence. Legato keeps the new chord. The looper goes count-in → record → auto-advance → synced overdub.
 
+## Round 2 (same day): hidden features made live + the four picks
+
+### Previously hidden, now working
+- **Swing:** the SWING 8/16 arp rates and a STRAIGHT / LIGHT / SHUFFLE control for the beat and sequence, done as real per-step timing offsets in the clock.
+- **Arp layers:** CHORD + ARP (the chord sustains under an arp an octave up) and PULSE + ARP (the chord pulses on every beat under the arp). Each has its own voice group.
+- **Vibrato, glide, stereo width, voice limit:** a shared vibrato LFO feeds every oscillator's detune. Glide slides each voice from the previous chord's pitch. Width sets the stereo spread of chord notes. VOICES caps notes at 1, 2, 3, 4 or all.
+- **USER drum kit:** load any audio file onto any pad. It's saved in IndexedDB and restored on launch.
+- **MIDI out:** off by default with no permission prompt on load. Switch it on and pick the output in SOUND. Devices plugged in later are picked up.
+- **Tuner and Mic** now use the engine's AudioContext instead of creating their own.
+- **Beat velocity:** tapping a cell cycles full → soft (ghost note) → off.
+- **Mix:** SYNTH / BEAT / LOOPS levels in the looper view.
+
+### The four picks
+1. **Loops persist and export.** Looper audio is saved to IndexedDB after every change (it's resampled if the device's sample rate differs) and restored on launch. **⤓ WAV** and **⤓ ×4** download the mix, with gains and mutes applied and peaks normalised.
+2. **Song sections.** Four 4-bar sections, A–D, with copy between them. A SONG row arranges them (for example A A B A), and song mode plays the arrangement. The bottom bar shows the section that's playing. Tied chords carry across section boundaries.
+3. **Tempo is locked while loops exist.** Recorded loops are fixed-length audio, so changing BPM would slide the beat off them. The BPM controls now refuse the change with a message and show 🔒. Restored loops also restore their tempo. Clearing the loops unlocks it.
+4. **Chord lock and vocoder have controls.** Hold a chord, move the pad, then tap **🔒 LOCK** (or press E, as on the hardware). The KEY menu lists locks so you can remove them. VOCODER mode routes the synths through a 16-band vocoder driven by the mic, with formant shift and a noise gate.
+
+### Smoothness fixes done along the way
+- **Chord colour changes morph instead of re-attacking.** On sustained sounds, moving the pad (or letting go of the newer of two held keys) retunes the voices in place. Shared notes keep ringing and new ones fade in, so there are no swell restarts or gaps. A new key press still re-attacks, which is what you want for plucks.
+- **Every knob is de-zippered:** filter, reverb, delay, chorus and the rest glide over about 15 ms instead of jumping. So do master volume and the mix levels.
+- **Voices clean up after themselves,** including their vibrato connections, so long sessions don't slowly get heavier.
+
 ## Still open (ranked)
 
-1. **Loops aren't saved.** Looper audio is lost on reload, and there's no WAV export or "bounce". This is the biggest remaining gap for "making music" rather than jamming.
-2. **Song structure:** a single 4-bar progression. Next steps would be multiple patterns (A/B), chaining, and per-slot length.
-3. **Changing BPM with loops recorded** keeps the loop at its original length, so the grid drifts from the beat. The BPM control should lock (or warn) while loops exist.
-4. **Chord lock** has store support but no UI (the spec says: hold chord + pad + SOUND).
-5. **Vocoder** (`src/audio/vocoder.ts`) is implemented but not wired into any mode.
-6. **Hidden, unimplemented features:** arp CHORD+ARP / RHYTHM+ARP, swing rates, vibrato, glide, stereo width, voice count, and the user drum kit.
-7. **MIDI:** access is requested on load with no device picker or on/off switch.
-8. **Portrait phones** get a "rotate" wall. A stacked portrait layout (keys at the bottom, pad above) would make the first open smoother.
-9. The **Tuner and Mic** views create their own AudioContext. They should share the engine's.
-10. **Beat feel:** no swing or humanise, and no velocity editing in the grid.
+What's left for a smooth, seamless feel:
+
+1. **Touch-to-sound latency on Android.** Measure it on a real device. If it's high, move to `pointerrawupdate`, a smaller `latencyHint` (for example 0.01), and AudioWorklet-based voices.
+2. **Real-time progression recording:** play chords over the beat and have them quantised into the section, as an alternative to step entry.
+3. **Better instruments:** real multi-sampled piano, strings and guitar, loaded on demand. The procedural ones are fine for sketching.
+4. **Reverb quality:** the reverb's impulse response is plain decaying noise. A designed plate or hall would sound much more polished.
+5. **Per-track loop volume and pan, and undo for the last overdub.**
+6. **A fill or crash into each new section, and per-section beat variations** (a busier groove on the chorus).
+7. **Time-stretched loops,** so tempo could stay unlocked.
+8. **MIDI clock out and MIDI input** for playing the chords from a controller.
+9. **Chord Hero and Ear Trainer** weren't reworked this round.

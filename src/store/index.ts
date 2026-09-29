@@ -13,6 +13,21 @@ export interface SequenceSlot {
 export const SEQUENCE_SLOTS = 8;
 /** Transport 16th-note steps per sequence slot (2 beats). */
 export const STEPS_PER_SLOT = 8;
+/** Transport steps in one section (4 bars). */
+export const SECTION_STEPS = SEQUENCE_SLOTS * STEPS_PER_SLOT;
+/** Song sections — e.g. A = verse, B = chorus. */
+export const SECTION_NAMES = ['A', 'B', 'C', 'D'] as const;
+
+export type Section = (SequenceSlot | null)[];
+
+const emptySection = (): Section => Array.from({ length: SEQUENCE_SLOTS }, () => null);
+
+/** The section currently being edited (what the sequencer grid shows). */
+export function currentSection(s: Pick<AppState, 'sections' | 'editSection'>): Section {
+  return s.sections[s.editSection] ?? emptySection();
+}
+
+export interface MixLevels { synth: number; beat: number; loops: number }
 
 export interface Toast {
   id: number;
@@ -56,9 +71,29 @@ export interface AppState {
   beatVariation: number;
   beatHits: DrumHit[];
   beatEdited: boolean;
-  sequence: (SequenceSlot | null)[];
+  /** Four 4-bar chord sections (A–D). */
+  sections: Section[];
+  editSection: number;
+  /** Arrangement, as section indexes, played in order when songMode is on. */
+  songChain: number[];
+  songMode: boolean;
+  /** Section the transport is currently playing (for the UI). */
+  playingSection: number | null;
   sequenceEnabled: boolean;
   selectedSlot: number | null;
+  /** 0 = straight, 0.33 = triplet shuffle. Applies to the beat and the sequence. */
+  beatSwing: number;
+  mix: MixLevels;
+
+  midiEnabled: boolean;
+  midiOutputId: string | null;
+  midiOutputs: { id: string; name: string }[];
+  /** Drum sounds with a user-loaded sample in the USER kit. */
+  userKitSounds: DrumHit['sound'][];
+
+  vocoderFormant: number;
+  vocoderGate: number;
+  vocoderMicOn: boolean;
 
   looperState: LooperState;
   looperTracks: LooperTrack[];
@@ -104,6 +139,22 @@ export interface AppState {
   setBeatEnabled: (on: boolean) => void;
   selectBeat: (genre: string, variation: number) => void;
   toggleBeatHit: (step: number, sound: DrumHit['sound']) => void;
+  /** Cycles a beat cell: off → full → soft (ghost/accent) → off. */
+  cycleBeatHit: (step: number, sound: DrumHit['sound']) => void;
+  setBeatSwing: (amount: number) => void;
+  setMix: (channel: keyof MixLevels, level: number) => void;
+  setEditSection: (index: number) => void;
+  copySection: (from: number, to: number) => void;
+  setSongChain: (chain: number[]) => void;
+  setSongMode: (on: boolean) => void;
+  setPlayingSection: (index: number | null) => void;
+  setMidiEnabled: (on: boolean) => void;
+  setMidiOutputId: (id: string | null) => void;
+  setMidiOutputs: (outputs: { id: string; name: string }[]) => void;
+  setUserKitSounds: (sounds: DrumHit['sound'][]) => void;
+  setVocoder: (update: Partial<Pick<AppState, 'vocoderFormant' | 'vocoderGate' | 'vocoderMicOn'>>) => void;
+  /** True while recorded loops pin the tempo (changing it would drift them off the beat). */
+  tempoLocked: () => boolean;
   clearBeat: () => void;
   setSequenceSlot: (index: number, slot: SequenceSlot | null) => void;
   clearSequence: () => void;
@@ -133,7 +184,7 @@ const defaultEffects: Record<EffectType, { enabled: boolean; value: number }> = 
   lfoVibrato: { enabled: false, value: 0.5 },
   glide: { enabled: false, value: 0.5 },
   stereo: { enabled: true, value: 0.7 },
-  voiceCount: { enabled: true, value: 1.0 },
+  voiceCount: { enabled: false, value: 6 },
 };
 
 function beatHitsFor(genre: string, variation: number): DrumHit[] {
@@ -153,7 +204,9 @@ const PERSISTED_KEYS = [
   'key', 'scale', 'globalOctave', 'buttonOctaves', 'joystickMode', 'bassMode', 'voiceLeading',
   'inversions', 'chordLocks', 'playMode', 'synthMode', 'waveform', 'fmPresetIndex', 'sampleName',
   'adsr', 'effects', 'bpm', 'drumKit', 'arpPattern', 'arpRate', 'arpChordMode', 'strumSpeed',
-  'beatEnabled', 'beatGenre', 'beatVariation', 'beatHits', 'beatEdited', 'sequence', 'sequenceEnabled',
+  'beatEnabled', 'beatGenre', 'beatVariation', 'beatHits', 'beatEdited', 'sections', 'editSection',
+  'songChain', 'songMode', 'sequenceEnabled', 'beatSwing', 'mix', 'midiEnabled', 'midiOutputId',
+  'vocoderFormant', 'vocoderGate',
   'looperBars', 'metronomeOn', 'volume',
 ] as const satisfies readonly (keyof AppState)[];
 
@@ -172,9 +225,19 @@ function loadSession(): Partial<AppState> {
     if (out.sampleName === 'mic') out.sampleName = 'keys';
     if (typeof out.playMode === 'string' && NON_RESTORABLE_MODES.has(out.playMode as PlayMode)) out.playMode = 'play';
     if (out.effects && typeof out.effects === 'object') {
-      out.effects = { ...defaultEffects, ...(out.effects as object) };
+      const effects = { ...defaultEffects, ...(out.effects as object) } as AppState['effects'];
+      // Older sessions stored voiceCount as an unused 1.0; now it caps chord notes.
+      if (effects.voiceCount.value < 1.5) effects.voiceCount = { ...defaultEffects.voiceCount };
+      out.effects = effects;
     }
-    if (Array.isArray(out.sequence) && out.sequence.length !== SEQUENCE_SLOTS) delete out.sequence;
+    // v1 sessions had a single `sequence`; it becomes section A.
+    if (!Array.isArray(out.sections) && Array.isArray(parsed.sequence) && parsed.sequence.length === SEQUENCE_SLOTS) {
+      out.sections = [parsed.sequence as Section, emptySection(), emptySection(), emptySection()];
+    }
+    if (Array.isArray(out.sections) && (out.sections.length !== SECTION_NAMES.length
+      || (out.sections as Section[]).some((sec) => !Array.isArray(sec) || sec.length !== SEQUENCE_SLOTS))) {
+      delete out.sections;
+    }
     return out as Partial<AppState>;
   } catch {
     return {};
@@ -196,7 +259,7 @@ function scheduleSave(state: AppState): void {
 
 let toastId = 0;
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   key: 'C',
   scale: 'major',
   globalOctave: 0,
@@ -232,7 +295,20 @@ export const useAppStore = create<AppState>((set) => ({
   beatVariation: 0,
   beatHits: beatHitsFor(GENRES[0] ?? 'Rock', 0),
   beatEdited: false,
-  sequence: Array.from({ length: SEQUENCE_SLOTS }, () => null),
+  sections: SECTION_NAMES.map(() => emptySection()),
+  editSection: 0,
+  songChain: [0],
+  songMode: false,
+  playingSection: null,
+  beatSwing: 0,
+  mix: { synth: 1, beat: 0.9, loops: 1 },
+  midiEnabled: false,
+  midiOutputId: null,
+  midiOutputs: [],
+  userKitSounds: [],
+  vocoderFormant: 0,
+  vocoderGate: 0.02,
+  vocoderMicOn: false,
   sequenceEnabled: true,
   selectedSlot: null,
 
@@ -287,7 +363,15 @@ export const useAppStore = create<AppState>((set) => ({
   setEffect: (type, update) => set((s) => ({
     effects: { ...s.effects, [type]: { ...s.effects[type], ...update } },
   })),
-  setBpm: (bpm) => set({ bpm: Math.max(40, Math.min(300, Math.round(bpm))) }),
+  setBpm: (bpm) => set((s) => {
+    const next = Math.max(40, Math.min(300, Math.round(bpm)));
+    if (next === s.bpm) return {};
+    // Loops are fixed-length audio: a new tempo would slide them off the beat.
+    if (s.looperTracks.some((t) => t.state === 'playing' || t.state === 'muted' || t.state === 'recording')) {
+      return { toast: { id: ++toastId, text: 'Tempo is locked to your loops — clear them to change it' } };
+    }
+    return { bpm: next };
+  }),
   setDrumKit: (drumKit) => set({ drumKit }),
   setArpPattern: (arpPattern) => set({ arpPattern }),
   setArpRate: (arpRate) => set({ arpRate }),
@@ -308,11 +392,38 @@ export const useAppStore = create<AppState>((set) => ({
   }),
   clearBeat: () => set({ beatHits: [], beatEdited: true }),
   setSequenceSlot: (index, slot) => set((s) => {
-    const sequence = [...s.sequence];
-    sequence[index] = slot;
-    return { sequence };
+    const sections = s.sections.map((sec, i) => (i === s.editSection ? [...sec] : sec));
+    sections[s.editSection]![index] = slot;
+    return { sections };
   }),
-  clearSequence: () => set({ sequence: Array.from({ length: SEQUENCE_SLOTS }, () => null), selectedSlot: 0 }),
+  clearSequence: () => set((s) => ({
+    sections: s.sections.map((sec, i) => (i === s.editSection ? emptySection() : sec)),
+    selectedSlot: 0,
+  })),
+  setEditSection: (editSection) => set({ editSection, selectedSlot: null }),
+  copySection: (from, to) => set((s) => ({
+    sections: s.sections.map((sec, i) => (i === to ? [...(s.sections[from] ?? emptySection())] : sec)),
+  })),
+  setSongChain: (songChain) => set({ songChain: songChain.length > 0 ? songChain : [0] }),
+  setSongMode: (songMode) => set({ songMode }),
+  setPlayingSection: (playingSection) => set({ playingSection }),
+  cycleBeatHit: (step, sound) => set((s) => {
+    const existing = s.beatHits.find((h) => h.step === step && h.sound === sound);
+    const others = s.beatHits.filter((h) => h !== existing);
+    let beatHits: DrumHit[];
+    if (!existing) beatHits = [...others, { step, sound, velocity: 1 }];
+    else if (existing.velocity > 0.6) beatHits = [...others, { step, sound, velocity: 0.4 }];
+    else beatHits = others;
+    return { beatHits, beatEdited: true };
+  }),
+  setBeatSwing: (beatSwing) => set({ beatSwing: Math.max(0, Math.min(0.5, beatSwing)) }),
+  setMix: (channel, level) => set((s) => ({ mix: { ...s.mix, [channel]: Math.max(0, Math.min(1.5, level)) } })),
+  setMidiEnabled: (midiEnabled) => set({ midiEnabled }),
+  setMidiOutputId: (midiOutputId) => set({ midiOutputId }),
+  setMidiOutputs: (midiOutputs) => set({ midiOutputs }),
+  setUserKitSounds: (userKitSounds) => set({ userKitSounds }),
+  setVocoder: (update) => set(update),
+  tempoLocked: () => get().looperTracks.some((t) => t.state === 'playing' || t.state === 'muted'),
   setSequenceEnabled: (sequenceEnabled) => set({ sequenceEnabled }),
   setSelectedSlot: (selectedSlot) => set({ selectedSlot }),
   setLooperState: (looperState) => set({ looperState }),

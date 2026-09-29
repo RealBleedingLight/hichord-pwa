@@ -8,9 +8,10 @@ const ACCENT = CYBER.primary;
 export interface MicSampleViewProps {
   /** Receives the captured take (and its detected pitch) so it can be played from the chord keys. */
   onSampleCaptured?: (buffer: AudioBuffer, pitchHz: number | null) => void;
+  getAudioContext?: () => AudioContext | null;
 }
 
-export function MicSampleView({ onSampleCaptured }: MicSampleViewProps = {}) {
+export function MicSampleView({ onSampleCaptured, getAudioContext }: MicSampleViewProps = {}) {
   const samplerRef = useRef<MicSampler | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const [recording, setRecording] = useState(false);
@@ -29,7 +30,7 @@ export function MicSampleView({ onSampleCaptured }: MicSampleViewProps = {}) {
     setPitch(null);
     try {
       const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = ctxRef.current ?? new AudioContextCtor();
+      const ctx = ctxRef.current ?? getAudioContext?.() ?? new AudioContextCtor();
       ctxRef.current = ctx;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -54,7 +55,7 @@ export function MicSampleView({ onSampleCaptured }: MicSampleViewProps = {}) {
       setRecording(false);
       setStatus('Ready to record a sample');
     }
-  }, [onSampleCaptured]);
+  }, [onSampleCaptured, getAudioContext]);
 
   const stopRecording = useCallback(() => {
     samplerRef.current?.stop();

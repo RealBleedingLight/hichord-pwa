@@ -6,10 +6,16 @@ export function calculateLoopLength(bars: number, bpm: number, sampleRate: numbe
   return Math.round(bars * beatsPerBar * beatDuration * sampleRate);
 }
 
+export interface LoopSnapshot {
+  loopLength: number;
+  tracks: ({ left: Float32Array; right: Float32Array; gain: number; muted: boolean } | null)[];
+}
+
 export type LooperEvent =
   | { type: 'recordingDone'; trackIndex: number }
   | { type: 'recordingCancelled'; trackIndex: number }
-  | { type: 'position'; phase: number };
+  | { type: 'position'; phase: number }
+  | ({ type: 'exported'; requestId: number } & LoopSnapshot);
 
 /**
  * Main-thread side of the looper worklet. All timing lives in the worklet;
@@ -105,6 +111,27 @@ export class LooperController {
 
   clearTrack(trackIndex: number): void {
     this.workletNode?.port.postMessage({ type: 'clearTrack', trackIndex });
+  }
+
+  private nextRequest = 0;
+
+  /** Copies all recorded audio out of the worklet (for saving / WAV export). */
+  exportTracks(): Promise<LoopSnapshot> {
+    const requestId = ++this.nextRequest;
+    return new Promise((resolve) => {
+      const off = this.onEvent((e) => {
+        if (e.type === 'exported' && e.requestId === requestId) {
+          off();
+          resolve({ loopLength: e.loopLength, tracks: e.tracks });
+        }
+      });
+      this.workletNode?.port.postMessage({ type: 'export', requestId });
+    });
+  }
+
+  /** Loads previously saved loops (stopped; call play() to hear them). */
+  importTracks(snapshot: LoopSnapshot): void {
+    this.workletNode?.port.postMessage({ type: 'import', ...snapshot });
   }
 
   clearAll(): void {

@@ -55,6 +55,8 @@ export class Vocoder {
     this.baseFrequencies = computeBandFrequencies(this.numBands);
 
     this.micInput = ctx.createGain();
+    // Band envelopes of a normal speaking voice are tiny; boost the analysis side.
+    this.micInput.gain.value = 6;
     this.synthInput = ctx.createGain();
     this.output = ctx.createGain();
     this.output.gain.value = 0; // disabled until enable() is called
@@ -170,13 +172,18 @@ export class Vocoder {
     }
   }
 
+  /** Mic sensitivity (analysis gain). */
+  setInputGain(gain: number): void {
+    this.micInput.gain.value = gain;
+  }
+
   getGateThreshold(): number {
     return this.gateThreshold;
   }
 
   enable(): void {
     this.enabled = true;
-    this.output.gain.value = 1;
+    this.output.gain.value = 3;
   }
 
   disable(): void {

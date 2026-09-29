@@ -164,6 +164,32 @@ export class HiChordDB {
     return sample.data;
   }
 
+  async listSampleNames(): Promise<string[]> {
+    const db = await this.dbPromise;
+    return (await db.getAllKeys(SAMPLES_STORE)) as string[];
+  }
+
+  async deleteSample(name: string): Promise<void> {
+    const db = await this.dbPromise;
+    await db.delete(SAMPLES_STORE, name);
+  }
+
+  /** Stores any structured-cloneable value (e.g. looper audio) under `key`. */
+  async putValue(key: string, value: object): Promise<void> {
+    const db = await this.dbPromise;
+    await db.put(SETTINGS_STORE, value, key);
+  }
+
+  async getValue<T extends object>(key: string): Promise<T | undefined> {
+    const db = await this.dbPromise;
+    return (await db.get(SETTINGS_STORE, key)) as T | undefined;
+  }
+
+  async deleteValue(key: string): Promise<void> {
+    const db = await this.dbPromise;
+    await db.delete(SETTINGS_STORE, key);
+  }
+
   async saveSettings(settings: object): Promise<void> {
     const db = await this.dbPromise;
     await db.put(SETTINGS_STORE, settings, SETTINGS_KEY);

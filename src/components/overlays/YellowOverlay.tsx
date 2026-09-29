@@ -39,6 +39,38 @@ const EFFECTS: { type: EffectType; label: string }[] = [
   { type: 'tremolo', label: 'TREMOLO' },
 ];
 
+/** Controls that shape each voice rather than the mix. */
+const VOICE_CONTROLS: { type: EffectType; label: string }[] = [
+  { type: 'lfoVibrato', label: 'VIBRATO' },
+  { type: 'glide', label: 'GLIDE' },
+  { type: 'stereo', label: 'WIDTH' },
+];
+
+const VOICE_LIMITS = [1, 2, 3, 4, 6];
+
+function MidiSection() {
+  const midiEnabled = useAppStore((s) => s.midiEnabled);
+  const setMidiEnabled = useAppStore((s) => s.setMidiEnabled);
+  const midiOutputs = useAppStore((s) => s.midiOutputs);
+  const midiOutputId = useAppStore((s) => s.midiOutputId);
+  const setMidiOutputId = useAppStore((s) => s.setMidiOutputId);
+  const selected = midiOutputId ?? midiOutputs[0]?.id;
+  return (
+    <div style={sectionStyle}>
+      <div style={sectionLabelStyle(ACCENT)}>MIDI out <span style={{ textTransform: 'none', fontWeight: 400, color: '#999' }}>— play an external synth / DAW (channel 1)</span></div>
+      <div style={rowStyle}>
+        <button data-testid="midi-toggle" style={chipStyle(midiEnabled, ACCENT)} onClick={() => setMidiEnabled(!midiEnabled)}>
+          {midiEnabled ? 'ON' : 'OFF'}
+        </button>
+        {midiEnabled && midiOutputs.length === 0 && <span style={{ fontSize: 12, color: '#999', alignSelf: 'center' }}>No devices found</span>}
+        {midiEnabled && midiOutputs.map((o) => (
+          <button key={o.id} style={chipStyle(selected === o.id, ACCENT)} onClick={() => setMidiOutputId(o.id)}>{o.name}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Filter cutoff is exponential in feel; the slider works in 0–1 and maps to 80 Hz–20 kHz. */
 const FILTER_MIN = 80;
 const FILTER_MAX = 20000;
@@ -48,6 +80,16 @@ const sliderToCutoff = (v: number) => Math.round(FILTER_MIN * Math.pow(FILTER_MA
 const ADSR_PRESET_NAMES: ADSRPresetName[] = ['TOUCH', 'PLUCK', 'SHORT', 'SUSTAIN', 'LONG', 'SWELL'];
 
 const LABEL_COLOR = '#c9a84a';
+
+function effectToggleStyle(enabled: boolean): React.CSSProperties {
+  return {
+    minWidth: 78, height: 30, padding: '0 8px', borderRadius: 4,
+    background: enabled ? CYBER.amber : 'transparent',
+    border: '1px solid ' + (enabled ? CYBER.amber : '#554420'),
+    color: enabled ? '#000' : LABEL_COLOR,
+    fontSize: 10, fontWeight: 700, cursor: 'pointer', textAlign: 'left',
+  };
+}
 
 function AdsrCurve({ attack, decay, sustain, release }: { attack: number; decay: number; sustain: number; release: number }) {
   // Scale times so the whole shape fits; hold the sustain for a fixed width.
@@ -264,6 +306,49 @@ export function YellowOverlay() {
       </div>
 
       <div style={sectionStyle}>
+        <div style={sectionLabelStyle(ACCENT)}>Voice</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
+          {VOICE_CONTROLS.map(({ type, label }) => {
+            const state = effects[type];
+            return (
+              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={() => setEffect(type, { enabled: !state.enabled })}
+                  aria-label={`toggle ${label}`}
+                  aria-pressed={state.enabled}
+                  style={effectToggleStyle(state.enabled)}
+                >
+                  {state.enabled ? '● ' : '○ '}{label}
+                </button>
+                <input
+                  type="range" style={{ ...sliderStyle, opacity: state.enabled ? 1 : 0.45 }}
+                  min={0} max={1} step={0.01} value={state.value}
+                  onChange={(e) => setEffect(type, { value: parseFloat(e.target.value), enabled: true })}
+                  aria-label={`${label} value`}
+                />
+              </div>
+            );
+          })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 10, minWidth: 52, color: LABEL_COLOR }}>VOICES</span>
+            {VOICE_LIMITS.map((n) => {
+              const vc = effects.voiceCount;
+              const active = vc.enabled ? Math.round(vc.value) === n : n === 6;
+              return (
+                <button
+                  key={n}
+                  style={{ ...chipStyle(active, ACCENT), minWidth: 28, padding: '4px 6px' }}
+                  onClick={() => setEffect('voiceCount', n === 6 ? { enabled: false, value: 6 } : { enabled: true, value: n })}
+                >
+                  {n === 6 ? 'ALL' : n}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div style={sectionStyle}>
         <div style={sectionLabelStyle(ACCENT)}>Effects <span style={{ textTransform: 'none', fontWeight: 400, color: '#999' }}>— tap a name to switch it on/off</span></div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
           {EFFECTS.map(({ type, label }) => {
@@ -276,13 +361,7 @@ export function YellowOverlay() {
                   onClick={() => setEffect(type, { enabled: !state.enabled })}
                   aria-label={`toggle ${label}`}
                   aria-pressed={state.enabled}
-                  style={{
-                    minWidth: 78, height: 30, padding: '0 8px', borderRadius: 4,
-                    background: state.enabled ? CYBER.amber : 'transparent',
-                    border: '1px solid ' + (state.enabled ? CYBER.amber : '#554420'),
-                    color: state.enabled ? '#000' : LABEL_COLOR,
-                    fontSize: 10, fontWeight: 700, cursor: 'pointer', textAlign: 'left',
-                  }}
+                  style={effectToggleStyle(state.enabled)}
                 >
                   {state.enabled ? '● ' : '○ '}{label}
                 </button>
@@ -305,6 +384,7 @@ export function YellowOverlay() {
           })}
         </div>
       </div>
+      <MidiSection />
     </div>
   );
 }

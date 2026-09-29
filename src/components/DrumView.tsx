@@ -1,5 +1,5 @@
 // src/components/DrumView.tsx
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useAppStore } from '@/store';
 import type { DrumKitName, DrumSound } from '@/audio/types';
 import { GENRES, getPatternsForGenre } from '@/data/drum-patterns';
@@ -43,6 +43,13 @@ const DRUM_KITS: { value: DrumKitName; label: string }[] = [
   { value: 'lynn', label: 'LYNN' },
   { value: 'kr78', label: 'KR78' },
   { value: 'trap', label: 'TRAP' },
+  { value: 'user', label: 'USER' },
+];
+
+const SWING_STEPS = [
+  { value: 0, label: 'STRAIGHT' },
+  { value: 0.15, label: 'LIGHT' },
+  { value: 0.33, label: 'SHUFFLE' },
 ];
 
 const NUM_STEPS = 16;
@@ -51,16 +58,24 @@ export interface DrumViewProps {
   onTriggerDrum: (sound: DrumSound) => void;
   onHoldChange?: (sound: DrumSound, held: boolean) => void;
   onToggleTransport?: () => void;
+  /** Loads (or with null, removes) a user sample for a pad in the USER kit. */
+  onUserSample?: (sound: DrumSound, file: File | null) => void;
 }
 
-export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport }: DrumViewProps) {
+export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport, onUserSample }: DrumViewProps) {
   const mode = useAppStore((s) => s.playMode);
   const beatGenre = useAppStore((s) => s.beatGenre);
   const beatVariation = useAppStore((s) => s.beatVariation);
   const beatHits = useAppStore((s) => s.beatHits);
   const beatEdited = useAppStore((s) => s.beatEdited);
   const selectBeat = useAppStore((s) => s.selectBeat);
-  const toggleBeatHit = useAppStore((s) => s.toggleBeatHit);
+  const cycleBeatHit = useAppStore((s) => s.cycleBeatHit);
+  const beatSwing = useAppStore((s) => s.beatSwing);
+  const setBeatSwing = useAppStore((s) => s.setBeatSwing);
+  const userKitSounds = useAppStore((s) => s.userKitSounds);
+  const [editingKit, setEditingKit] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const pendingSoundRef = useRef<DrumSound | null>(null);
   const clearBeat = useAppStore((s) => s.clearBeat);
   const transportPlaying = useAppStore((s) => s.transportPlaying);
   const transportStep = useAppStore((s) => s.transportStep);
@@ -71,7 +86,7 @@ export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport }: Dru
   const genrePatterns = getPatternsForGenre(beatGenre);
   const currentStep = transportPlaying && transportStep !== null ? transportStep % NUM_STEPS : null;
 
-  const hitSet = useMemo(() => new Set(beatHits.map((h) => `${h.sound}:${h.step}`)), [beatHits]);
+  const hitVel = useMemo(() => new Map(beatHits.map((h) => [`${h.sound}:${h.step}`, h.velocity])), [beatHits]);
   // Show any extra sounds the chosen pattern uses beyond the default rows.
   const rows = useMemo(() => {
     const extra = [...new Set(beatHits.map((h) => h.sound))]
@@ -81,10 +96,15 @@ export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport }: Dru
   }, [beatHits]);
 
   const handlePadDown = useCallback((sound: DrumSound) => {
+    if (editingKit) {
+      pendingSoundRef.current = sound;
+      fileRef.current?.click();
+      return;
+    }
     onTriggerDrum(sound);
     setHeldSounds((prev) => new Set(prev).add(sound));
     onHoldChange?.(sound, true);
-  }, [onTriggerDrum, onHoldChange]);
+  }, [onTriggerDrum, onHoldChange, editingKit]);
 
   const handlePadUp = useCallback((sound: DrumSound) => {
     setHeldSounds((prev) => {
@@ -113,9 +133,21 @@ export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport }: Dru
     }}>
       {/* ── Left: 4×4 Pad Grid ──────────────────────── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
-        <div style={{ fontSize: 11, color: CYBER.textDim, textAlign: 'center', fontFamily: CYBER.fontMono }}>
-          {mode === 'autoDrum' ? 'HOLD A PAD — IT REPEATS AT THE ARP RATE' : 'TAP PADS TO PLAY'}
+        <div style={{ fontSize: 11, color: editingKit ? CYBER.amber : CYBER.textDim, textAlign: 'center', fontFamily: CYBER.fontMono }}>
+          {editingKit ? 'TAP A PAD TO LOAD A SAMPLE ONTO IT' : mode === 'autoDrum' ? 'HOLD A PAD — IT REPEATS AT THE ARP RATE' : 'TAP PADS TO PLAY'}
         </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="audio/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            const sound = pendingSoundRef.current;
+            if (file && sound) onUserSample?.(sound, file);
+            e.target.value = '';
+          }}
+        />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridAutoRows: '1fr', gap: 5, flex: 1, minHeight: 0 }}>
           {DRUM_PADS.map((pad) => {
             const isHeld = heldSounds.has(pad.sound);
@@ -138,9 +170,14 @@ export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport }: Dru
                   padding: 2, minHeight: 0,
                   fontSize: 10, fontWeight: 700, fontFamily: CYBER.fontMono,
                   color: isHeld ? '#fff' : CYBER.textMid, letterSpacing: 0.5,
+                  outline: editingKit ? '1px dashed ' + CYBER.amber : 'none',
+                  position: 'relative',
                 }}
               >
                 {pad.label}
+                {drumKit === 'user' && userKitSounds.includes(pad.sound) && (
+                  <span style={{ position: 'absolute', top: 3, right: 5, color: CYBER.amber, fontSize: 9 }}>●</span>
+                )}
               </button>
             );
           })}
@@ -149,6 +186,11 @@ export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport }: Dru
           {DRUM_KITS.map((k) => (
             <button key={k.value} onClick={() => setDrumKit(k.value)} style={chip(drumKit === k.value)}>{k.label}</button>
           ))}
+          {drumKit === 'user' && onUserSample && (
+            <button onClick={() => setEditingKit(!editingKit)} style={{ ...chip(editingKit), background: editingKit ? CYBER.amber : '#1a0808', color: editingKit ? '#000' : CYBER.amber }}>
+              {editingKit ? 'DONE' : 'LOAD SAMPLES'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -187,19 +229,23 @@ export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport }: Dru
                 {row.label}
               </button>
               {Array.from({ length: NUM_STEPS }, (_, stepIdx) => {
-                const active = hitSet.has(`${row.sound}:${stepIdx}`);
+                const vel = hitVel.get(`${row.sound}:${stepIdx}`);
+                const active = vel !== undefined;
+                const soft = active && vel! <= 0.6;
                 const isNow = currentStep === stepIdx;
                 return (
                   <button
                     key={stepIdx}
                     data-testid={`beat-cell-${row.sound}-${stepIdx}`}
                     aria-pressed={active}
-                    onClick={() => toggleBeatHit(stepIdx, row.sound)}
+                    aria-label={`${row.label} step ${stepIdx + 1}${soft ? ' (soft)' : ''}`}
+                    onClick={() => cycleBeatHit(stepIdx, row.sound)}
                     style={{
                       flex: 1, minWidth: 0,
                       borderRadius: 3,
                       border: isNow ? '1px solid #fff' : active ? 'none' : '1px solid ' + (stepIdx % 4 === 0 ? '#552222' : '#331111'),
                       background: active ? row.color : stepIdx % 4 === 0 ? '#1f0a0a' : '#140606',
+                      opacity: soft ? 0.45 : 1,
                       boxShadow: active && isNow ? `0 0 10px ${row.color}` : 'none',
                       cursor: 'pointer',
                       touchAction: 'manipulation',
@@ -229,6 +275,10 @@ export function DrumView({ onTriggerDrum, onHoldChange, onToggleTransport }: Dru
             {beatGenre} - {genrePatterns[beatVariation]?.variation ?? ''}{beatEdited ? ' (edited)' : ''}
           </span>
           <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 10, color: CYBER.textDim }}>SWING</span>
+          {SWING_STEPS.map((sw) => (
+            <button key={sw.label} onClick={() => setBeatSwing(sw.value)} style={chip(Math.abs(beatSwing - sw.value) < 0.01)}>{sw.label}</button>
+          ))}
           <button onClick={clearBeat} style={chip(false)}>CLEAR</button>
         </div>
       </div>

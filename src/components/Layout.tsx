@@ -7,7 +7,7 @@ import { PianoKeys } from './PianoKeys';
 import { VolumeSlider } from './VolumeSlider';
 import { CenterArea, type CenterAreaProps } from './CenterArea';
 import { MenuOverlay } from './MenuOverlay';
-import { useAppStore } from '@/store';
+import { useAppStore, SECTION_NAMES } from '@/store';
 import type { ScaleDegree, JoystickDirection, JoystickMode } from '@/music/types';
 import { CYBER } from '@/theme';
 
@@ -24,6 +24,7 @@ interface LayoutProps {
   onToggleTransport: () => void;
   onLooperRecord: () => void;
   onLooperPlay: () => void;
+  onChordLock?: () => void;
 }
 
 const ROUND_BTN: React.CSSProperties = {
@@ -61,7 +62,11 @@ function TransportBar({ onToggleTransport, onRecord, onPlay }: {
   const setBeatEnabled = useAppStore((s) => s.setBeatEnabled);
   const beatGenre = useAppStore((s) => s.beatGenre);
   const beatEdited = useAppStore((s) => s.beatEdited);
-  const sequence = useAppStore((s) => s.sequence);
+  const sections = useAppStore((s) => s.sections);
+  const editSection = useAppStore((s) => s.editSection);
+  const songMode = useAppStore((s) => s.songMode);
+  const playingSection = useAppStore((s) => s.playingSection);
+  const tempoLocked = useAppStore((s) => s.looperTracks.some((t) => t.state === 'playing' || t.state === 'muted'));
   const sequenceEnabled = useAppStore((s) => s.sequenceEnabled);
   const setSequenceEnabled = useAppStore((s) => s.setSequenceEnabled);
   const bpm = useAppStore((s) => s.bpm);
@@ -70,7 +75,10 @@ function TransportBar({ onToggleTransport, onRecord, onPlay }: {
   const looperTracks = useAppStore((s) => s.looperTracks);
   const looperPhase = useAppStore((s) => s.looperPhase);
   const activeTrack = useAppStore((s) => s.activeTrack);
-  const hasSequence = sequence.some(Boolean);
+  const hasSequence = songMode ? sections.some((sec) => sec.some(Boolean)) : (sections[editSection] ?? []).some(Boolean);
+  const seqLabel = songMode
+    ? `SONG${playingSection !== null ? ' ' + SECTION_NAMES[playingSection] : ''}`
+    : `SEQ ${SECTION_NAMES[editSection]}`;
   const beatPulse = transportPlaying && transportStep !== null && transportStep % 4 === 0;
 
   const recLabel = looperState === 'waiting' ? 'COUNT-IN' : looperState === 'recording' ? 'REC' : null;
@@ -115,11 +123,16 @@ function TransportBar({ onToggleTransport, onRecord, onPlay }: {
           borderColor: sequenceEnabled && hasSequence ? CYBER.secondary : '#333',
         }}
       >
-        SEQ{hasSequence ? '' : ' —'}
+        {seqLabel}{hasSequence ? '' : ' —'}
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <button aria-label="Slower" onClick={() => setBpm(bpm - 1)} style={{ ...PILL_BTN, padding: '0 8px', color: CYBER.textMid }}>−</button>
-        <span style={{ minWidth: 52, textAlign: 'center', color: CYBER.textLight, fontFamily: CYBER.fontMono, fontSize: 12 }}>{bpm} BPM</span>
+        <span
+          title={tempoLocked ? 'Tempo is locked to your recorded loops' : ''}
+          style={{ minWidth: 52, textAlign: 'center', color: CYBER.textLight, fontFamily: CYBER.fontMono, fontSize: 12 }}
+        >
+          {tempoLocked ? '🔒' : ''}{bpm} BPM
+        </span>
         <button aria-label="Faster" onClick={() => setBpm(bpm + 1)} style={{ ...PILL_BTN, padding: '0 8px', color: CYBER.textMid }}>+</button>
       </div>
 
@@ -188,6 +201,7 @@ function Toast() {
 /** Modes whose center view needs the whole width (drum pads + step grid). */
 const FULL_WIDTH_MODES: Set<string> = new Set(['drum', 'drumLoops', 'autoDrum']);
 
+
 export function Layout(props: LayoutProps) {
   const playMode = useAppStore((s) => s.playMode);
   const isFullWidth = FULL_WIDTH_MODES.has(playMode);
@@ -219,7 +233,25 @@ export function Layout(props: LayoutProps) {
               mode={props.joystickMode}
             />
           </div>
-          <VolumeSlider value={props.volume} onChange={props.onVolumeChange} />
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <div style={{ flex: 1 }}>
+              <VolumeSlider value={props.volume} onChange={props.onVolumeChange} />
+            </div>
+            {props.onChordLock && (
+              <button
+                data-testid="chord-lock"
+                onPointerDown={(e) => { e.preventDefault(); props.onChordLock?.(); }}
+                title="Hold a chord key + move the pad, then tap to lock that colour to the key"
+                style={{
+                  height: 22, padding: '0 8px', borderRadius: 4, border: '1px solid ' + CYBER.borderBright,
+                  background: CYBER.panel, color: CYBER.textMid, fontSize: 10, fontWeight: 700,
+                  letterSpacing: 1, cursor: 'pointer', touchAction: 'none', flexShrink: 0,
+                }}
+              >
+                🔒 LOCK
+              </button>
+            )}
+          </div>
         </div>
       )}
 

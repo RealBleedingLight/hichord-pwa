@@ -50,6 +50,17 @@ export class MIDIOutputController {
     return outputs;
   }
 
+  /** Stops sending (after releasing any held notes) until an output is selected again. */
+  disable(): void {
+    this.releaseAll();
+    this.output = null;
+  }
+
+  /** Calls `cb` when devices are plugged in or removed. */
+  onDevicesChanged(cb: () => void): void {
+    if (this.access) this.access.onstatechange = () => cb();
+  }
+
   /** Selects the MIDI output to send to, by device id. No-op if the id is unknown. */
   selectOutput(id: string): void {
     const found = this.getOutputs().find((o) => o.id === id);

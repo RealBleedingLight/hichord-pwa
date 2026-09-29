@@ -1,7 +1,7 @@
 // src/components/overlays/RedOverlay.tsx
 import { useRef } from 'react';
 import { useAppStore } from '@/store';
-import type { PlayMode, StrumSpeed, ArpPattern, ArpRate, DrumKitName } from '@/audio/types';
+import type { PlayMode, StrumSpeed, ArpPattern, ArpRate, ArpChordMode, DrumKitName } from '@/audio/types';
 import { sectionLabelStyle, sectionStyle, rowStyle, chipStyle } from './shared';
 import { CYBER } from '@/theme';
 
@@ -32,6 +32,7 @@ const MODE_GROUPS: { title: string; modes: { value: PlayMode; label: string; hel
   {
     title: 'Tools & games',
     modes: [
+      { value: 'vocoder', label: 'VOCODER', help: 'Sing or talk into the mic while holding chords — robot voice.' },
       { value: 'micSample', label: 'MIC', help: 'Record your voice or any sound and play it as an instrument.' },
       { value: 'tuner', label: 'TUNER', help: 'Tune a guitar or voice with the mic.' },
       { value: 'chordHiro', label: 'HERO', help: 'Rhythm game: hit the falling chords in time.' },
@@ -59,7 +60,13 @@ const RATE_LABELS: Record<ArpRate, string> = {
   '1/1': '1/1', '1/2': '1/2', '1/4': '1/4', '1/8': '1/8', '1/16': '1/16',
   '1/16T': '1/16T', '1/32': '1/32', swing8: 'SWING 8', swing16: 'SWING 16',
 };
-const ARP_RATES: ArpRate[] = ['1/4', '1/8', '1/16', '1/16T', '1/32', '1/2', '1/1'];
+const ARP_RATES: ArpRate[] = ['1/4', '1/8', '1/16', '1/16T', '1/32', 'swing8', 'swing16', '1/2', '1/1'];
+
+const ARP_CHORD_MODES: { value: ArpChordMode; label: string }[] = [
+  { value: 'arpOnly', label: 'ARP ONLY' },
+  { value: 'chordPlusArp', label: 'CHORD + ARP' },
+  { value: 'rhythmPlusArp', label: 'PULSE + ARP' },
+];
 
 const DRUM_KITS: { value: DrumKitName; label: string }[] = [
   { value: 'tight', label: 'TIGHT' },
@@ -68,6 +75,7 @@ const DRUM_KITS: { value: DrumKitName; label: string }[] = [
   { value: 'lynn', label: 'LYNN' },
   { value: 'kr78', label: 'KR78' },
   { value: 'trap', label: 'TRAP' },
+  { value: 'user', label: 'USER' },
 ];
 
 export function RedOverlay() {
@@ -81,6 +89,8 @@ export function RedOverlay() {
   const setArpPattern = useAppStore((s) => s.setArpPattern);
   const arpRate = useAppStore((s) => s.arpRate);
   const setArpRate = useAppStore((s) => s.setArpRate);
+  const arpChordMode = useAppStore((s) => s.arpChordMode);
+  const setArpChordMode = useAppStore((s) => s.setArpChordMode);
   const drumKit = useAppStore((s) => s.drumKit);
   const setDrumKit = useAppStore((s) => s.setDrumKit);
 
@@ -200,6 +210,19 @@ export function RedOverlay() {
             {ARP_PATTERNS.map((p) => (
               <button key={p.value} style={chipStyle(arpPattern === p.value, ACCENT)} onClick={() => setArpPattern(p.value)}>
                 {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {playMode === 'arpeggio' && (
+        <div style={sectionStyle}>
+          <div style={sectionLabelStyle(ACCENT)}>Under the arp</div>
+          <div style={rowStyle}>
+            {ARP_CHORD_MODES.map((m) => (
+              <button key={m.value} style={chipStyle(arpChordMode === m.value, ACCENT)} onClick={() => setArpChordMode(m.value)}>
+                {m.label}
               </button>
             ))}
           </div>

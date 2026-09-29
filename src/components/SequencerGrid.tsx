@@ -1,6 +1,6 @@
 // src/components/SequencerGrid.tsx
-import { useMemo } from 'react';
-import { useAppStore, SEQUENCE_SLOTS, STEPS_PER_SLOT } from '@/store';
+import { useMemo, useState } from 'react';
+import { useAppStore, currentSection, SEQUENCE_SLOTS, STEPS_PER_SLOT, SECTION_NAMES } from '@/store';
 import { getChord } from '@/music/chord-engine';
 import { CYBER } from '@/theme';
 
@@ -9,17 +9,26 @@ export interface SequencerGridProps {
 }
 
 const SLOT_COLORS = [CYBER.secondary, CYBER.primary, CYBER.amber, '#4caf50'];
+const MAX_CHAIN = 16;
 
 /**
- * Chord progression editor: 4 bars split into 8 half-bar slots.
+ * Chord progression editor.
  *
- * Workflow: tap a slot (it glows), then press a chord key — the chord (with
- * whatever the pad is doing) is written there and the next slot is selected,
- * so a whole progression is just "tap slot 1, play 4–8 chords". Empty slots
- * hold the previous chord. The progression plays with ▶ alongside the beat.
+ * Four sections (A–D, e.g. verse / chorus / bridge), each 4 bars split into
+ * 8 half-bar slots. Tap a slot, then press chord keys to write them in; empty
+ * slots hold the previous chord. SONG mode plays the sections in the order
+ * of the arrangement row; otherwise the section being edited loops.
  */
 export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
-  const sequence = useAppStore((s) => s.sequence);
+  const sections = useAppStore((s) => s.sections);
+  const editSection = useAppStore((s) => s.editSection);
+  const setEditSection = useAppStore((s) => s.setEditSection);
+  const copySection = useAppStore((s) => s.copySection);
+  const songChain = useAppStore((s) => s.songChain);
+  const setSongChain = useAppStore((s) => s.setSongChain);
+  const songMode = useAppStore((s) => s.songMode);
+  const setSongMode = useAppStore((s) => s.setSongMode);
+  const playingSection = useAppStore((s) => s.playingSection);
   const selectedSlot = useAppStore((s) => s.selectedSlot);
   const setSelectedSlot = useAppStore((s) => s.setSelectedSlot);
   const setSequenceSlot = useAppStore((s) => s.setSequenceSlot);
@@ -30,12 +39,15 @@ export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
   const scale = useAppStore((s) => s.scale);
   const joystickMode = useAppStore((s) => s.joystickMode);
   const chordLocks = useAppStore((s) => s.chordLocks);
+  const [copying, setCopying] = useState(false);
 
+  const sequence = currentSection({ sections, editSection });
   const names = useMemo(() => sequence.map((slot) => slot
     ? getChord(key, scale, slot.degree, 4, slot.direction, joystickMode, 0, 'off', chordLocks).displayName
     : null), [sequence, key, scale, joystickMode, chordLocks]);
 
-  const playingSlot = transportPlaying && transportStep !== null ? Math.floor(transportStep / STEPS_PER_SLOT) % SEQUENCE_SLOTS : null;
+  const showingPlayhead = transportPlaying && transportStep !== null && (!songMode || playingSection === editSection);
+  const playingSlot = showingPlayhead ? Math.floor(transportStep! / STEPS_PER_SLOT) % SEQUENCE_SLOTS : null;
   const hasAny = sequence.some(Boolean);
 
   // An empty slot "holds" the last filled slot before it (wrapping round).
@@ -48,25 +60,61 @@ export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
   };
 
   const btn = (active: boolean, color: string): React.CSSProperties => ({
-    height: 34, padding: '0 12px', borderRadius: 6,
+    height: 30, padding: '0 10px', borderRadius: 6,
     background: active ? color : '#1a0808',
     color: active ? '#000' : CYBER.textMid,
     border: '1px solid ' + (active ? color : CYBER.border),
-    fontSize: 12, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', touchAction: 'manipulation',
+    fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: 'pointer', touchAction: 'manipulation',
+    flexShrink: 0,
   });
+
+  const sectionTab = (i: number): React.CSSProperties => {
+    const filled = sections[i]?.some(Boolean);
+    const editing = i === editSection;
+    const live = transportPlaying && playingSection === i;
+    return {
+      width: 34, height: 30, borderRadius: 6, cursor: 'pointer', touchAction: 'manipulation',
+      fontFamily: CYBER.fontDisplay, fontWeight: 800, fontSize: 13,
+      background: editing ? CYBER.secondary : '#1a0808',
+      color: editing ? '#000' : filled ? CYBER.textLight : '#6a4a4a',
+      border: live ? '2px solid ' + CYBER.green : '1px solid ' + (editing ? CYBER.secondary : CYBER.border),
+    };
+  };
 
   return (
     <div data-testid="sequencer" style={{
       width: '100%', height: '100%',
       display: 'flex', flexDirection: 'column',
-      gap: 8, padding: 8, overflow: 'hidden',
+      gap: 6, padding: 8, overflow: 'hidden',
       background: CYBER.panel, border: '1px solid ' + CYBER.border, borderRadius: 8,
       fontFamily: CYBER.fontMono,
     }}>
-      <div style={{ fontSize: 12, color: CYBER.textDim, minHeight: 16 }}>
-        {selectedSlot !== null
-          ? <>Press a <b style={{ color: CYBER.secondary }}>chord key</b> to fill slot {selectedSlot + 1} · slide the pad while holding to colour it</>
-          : hasAny ? 'Tap a slot to change it. Empty slots hold the previous chord.' : 'Tap slot 1, then play chord keys to write a progression.'}
+      {/* Sections */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {SECTION_NAMES.map((name, i) => (
+          <button
+            key={name}
+            data-testid={`section-${name}`}
+            onClick={() => {
+              if (copying) { copySection(editSection, i); setCopying(false); setEditSection(i); return; }
+              setEditSection(i);
+            }}
+            style={sectionTab(i)}
+          >
+            {name}
+          </button>
+        ))}
+        <button
+          onClick={() => setCopying(!copying)}
+          disabled={!hasAny}
+          style={{ ...btn(copying, CYBER.amber), opacity: hasAny ? 1 : 0.5 }}
+        >
+          {copying ? `COPY ${SECTION_NAMES[editSection]} TO…` : 'COPY'}
+        </button>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 11, color: CYBER.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {selectedSlot !== null ? `Play a chord → slot ${selectedSlot + 1}` : hasAny ? 'Tap a slot to edit' : 'Tap slot 1, then play chords'}
+        </span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, fontSize: 10, color: CYBER.textDim, textAlign: 'center' }}>
@@ -97,8 +145,8 @@ export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
             >
               <span style={{
                 fontFamily: CYBER.fontDisplay, fontWeight: 700,
-                fontSize: 'clamp(11px, 1.8vw, 16px)',
-                color: slot ? color : source !== null ? '#6a4a4a' : '#5a3a3a',
+                fontSize: 'clamp(10px, 1.5vw, 15px)',
+                color: slot ? color : '#6a4a4a',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
               }}>
                 {slot ? names[i] : source !== null ? '···' : '—'}
@@ -117,13 +165,51 @@ export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
         })}
       </div>
 
+      {/* Song arrangement */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+        <button data-testid="song-mode" onClick={() => setSongMode(!songMode)} style={btn(songMode, CYBER.green)}>
+          {songMode ? 'SONG ✓' : 'SONG'}
+        </button>
+        <div data-testid="song-chain" style={{ display: 'flex', gap: 3, overflowX: 'auto', flex: 1, minWidth: 0 }}>
+          {songChain.map((sec, i) => {
+            const live = songMode && transportPlaying && playingSection === sec;
+            return (
+              <button
+                key={i}
+                aria-label={`Remove ${SECTION_NAMES[sec]} from song position ${i + 1}`}
+                onClick={() => setSongChain(songChain.filter((_, j) => j !== i))}
+                style={{
+                  minWidth: 26, height: 26, borderRadius: 4, flexShrink: 0, cursor: 'pointer',
+                  background: live ? CYBER.green : '#1f1f1f', color: live ? '#000' : CYBER.textLight,
+                  border: '1px solid #333', fontWeight: 700, fontSize: 12,
+                }}
+              >
+                {SECTION_NAMES[sec]}
+              </button>
+            );
+          })}
+        </div>
+        {SECTION_NAMES.map((name, i) => (
+          <button
+            key={name}
+            data-testid={`song-add-${name}`}
+            onClick={() => setSongChain([...songChain, i].slice(0, MAX_CHAIN))}
+            style={{ ...btn(false, CYBER.green), padding: '0 6px', height: 26 }}
+          >
+            +{name}
+          </button>
+        ))}
+      </div>
+
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <button data-testid="sequencer-play" onClick={onToggleTransport} style={btn(transportPlaying, CYBER.secondary)}>
           {transportPlaying ? '■ STOP' : '▶ PLAY'}
         </button>
         <button onClick={() => setSelectedSlot(0)} style={btn(false, CYBER.secondary)}>WRITE FROM 1</button>
         <span style={{ flex: 1 }} />
-        <button data-testid="sequencer-clear" onClick={clearSequence} style={btn(false, CYBER.primary)} disabled={!hasAny}>CLEAR</button>
+        <button data-testid="sequencer-clear" onClick={clearSequence} style={btn(false, CYBER.primary)} disabled={!hasAny}>
+          CLEAR {SECTION_NAMES[editSection]}
+        </button>
       </div>
     </div>
   );

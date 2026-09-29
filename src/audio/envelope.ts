@@ -46,3 +46,11 @@ export function applyCut(param: AudioParam, when: number): number {
   param.setTargetAtTime(0, when, 0.004);
   return when + 0.03;
 }
+
+/** Click-free parameter change (a ~15 ms glide instead of a jump). */
+export function smoothSet(param: AudioParam, value: number, ctx: BaseAudioContext): void {
+  const now = ctx.currentTime;
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(param.value, now);
+  param.setTargetAtTime(value, now, 0.015);
+}
