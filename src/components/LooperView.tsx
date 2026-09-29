@@ -27,6 +27,8 @@ export interface LooperViewProps {
   onClearAll?: () => void;
   /** Downloads the loop mix as a WAV, repeated n times. */
   onExport?: (repeats: number) => void;
+  onTrackMix?: (trackIndex: number, update: { gain?: number; pan?: number }) => void;
+  onUndo?: () => void;
 }
 
 const MIX_CHANNELS: { key: 'synth' | 'beat' | 'loops'; label: string }[] = [
@@ -35,7 +37,7 @@ const MIX_CHANNELS: { key: 'synth' | 'beat' | 'loops'; label: string }[] = [
   { key: 'loops', label: 'LOOPS' },
 ];
 
-export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteToggle, onTrackClear, onClearAll, onExport }: LooperViewProps) {
+export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteToggle, onTrackClear, onClearAll, onExport, onTrackMix, onUndo }: LooperViewProps) {
   const mix = useAppStore((s) => s.mix);
   const setMix = useAppStore((s) => s.setMix);
   const bpm = useAppStore((s) => s.bpm);
@@ -119,6 +121,22 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
         ))}
       </div>
 
+      {onTrackMix && (() => {
+        const t = looperTracks[activeTrack];
+        if (!t || (t.state !== 'playing' && t.state !== 'muted')) return null;
+        return (
+          <div data-testid="track-mix" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto 1fr', gap: 6, alignItems: 'center', fontSize: 10, color: CYBER.textDim }}>
+            <span>T{t.index + 1} VOL</span>
+            <input type="range" min={0} max={1.5} step={0.01} value={t.gain} aria-label={`Track ${t.index + 1} volume`}
+              onChange={(e) => onTrackMix(t.index, { gain: parseFloat(e.target.value) })} style={{ touchAction: 'none', margin: 0 }} />
+            <span>PAN</span>
+            <input type="range" min={-1} max={1} step={0.05} value={t.pan ?? 0} aria-label={`Track ${t.index + 1} pan`}
+              onChange={(e) => onTrackMix(t.index, { pan: parseFloat(e.target.value) })}
+              onDoubleClick={() => onTrackMix(t.index, { pan: 0 })} style={{ touchAction: 'none', margin: 0 }} />
+          </div>
+        );
+      })()}
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
         <button
           data-testid="looper-record"
@@ -154,6 +172,11 @@ export function LooperView({ onRecordToggle, onStop, onPlayToggle, onTrackMuteTo
         >
           ■
         </button>
+        {onUndo && (
+          <button data-testid="looper-undo" onClick={onUndo} disabled={!hasAudio} style={{ ...small, padding: '0 10px', background: '#1a0808', color: hasAudio ? CYBER.textMid : '#555' }}>
+            ↶ UNDO
+          </button>
+        )}
         {onClearAll && (
           <button onClick={onClearAll} disabled={!hasAudio} style={{ ...small, padding: '0 10px', background: '#1a0808', color: hasAudio ? CYBER.textMid : '#555' }}>
             CLEAR ALL

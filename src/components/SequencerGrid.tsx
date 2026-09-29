@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useAppStore, currentSection, SEQUENCE_SLOTS, STEPS_PER_SLOT, SECTION_NAMES } from '@/store';
 import { getChord } from '@/music/chord-engine';
+import { getPatternsForGenre } from '@/data/drum-patterns';
 import { CYBER } from '@/theme';
 
 export interface SequencerGridProps {
@@ -40,6 +41,20 @@ export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
   const joystickMode = useAppStore((s) => s.joystickMode);
   const chordLocks = useAppStore((s) => s.chordLocks);
   const [copying, setCopying] = useState(false);
+  const seqRecording = useAppStore((s) => s.seqRecording);
+  const setSeqRecording = useAppStore((s) => s.setSeqRecording);
+  const sectionBeats = useAppStore((s) => s.sectionBeats);
+  const setSectionBeat = useAppStore((s) => s.setSectionBeat);
+  const autoFills = useAppStore((s) => s.autoFills);
+  const setAutoFills = useAppStore((s) => s.setAutoFills);
+  const beatGenre = useAppStore((s) => s.beatGenre);
+  const variations = getPatternsForGenre(beatGenre);
+  const sectionBeat = sectionBeats[editSection] ?? null;
+  // Tap cycles: MAIN → each variation of the current genre → MAIN.
+  const cycleSectionBeat = () => {
+    const next = sectionBeat === null ? 0 : sectionBeat + 1 < variations.length ? sectionBeat + 1 : null;
+    setSectionBeat(editSection, next);
+  };
 
   const sequence = currentSection({ sections, editSection });
   const names = useMemo(() => sequence.map((slot) => slot
@@ -73,7 +88,7 @@ export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
     const editing = i === editSection;
     const live = transportPlaying && playingSection === i;
     return {
-      width: 34, height: 30, borderRadius: 6, cursor: 'pointer', touchAction: 'manipulation',
+      width: 34, height: 30, borderRadius: 6, cursor: 'pointer', touchAction: 'manipulation', flexShrink: 0, padding: 0,
       fontFamily: CYBER.fontDisplay, fontWeight: 800, fontSize: 13,
       background: editing ? CYBER.secondary : '#1a0808',
       color: editing ? '#000' : filled ? CYBER.textLight : '#6a4a4a',
@@ -109,11 +124,17 @@ export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
           disabled={!hasAny}
           style={{ ...btn(copying, CYBER.amber), opacity: hasAny ? 1 : 0.5 }}
         >
-          {copying ? `COPY ${SECTION_NAMES[editSection]} TO…` : 'COPY'}
+          {copying ? `→ ?` : 'COPY'}
+        </button>
+        <button data-testid="section-beat" onClick={cycleSectionBeat} title="Beat used while this section plays"
+          style={{ ...btn(sectionBeat !== null, CYBER.amber), flexShrink: 1, minWidth: 0, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          BEAT: {sectionBeat === null ? 'MAIN' : (variations[sectionBeat]?.variation ?? 'MAIN').toUpperCase()}
         </button>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: CYBER.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {selectedSlot !== null ? `Play a chord → slot ${selectedSlot + 1}` : hasAny ? 'Tap a slot to edit' : 'Tap slot 1, then play chords'}
+        <span style={{ fontSize: 11, color: seqRecording ? CYBER.primary : CYBER.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {seqRecording
+            ? (transportPlaying ? 'REC: play chords in time' : 'REC armed — press ▶')
+            : selectedSlot !== null ? `Play a chord → slot ${selectedSlot + 1}` : hasAny ? 'Tap a slot to edit' : 'Tap slot 1, then play chords'}
         </span>
       </div>
 
@@ -167,8 +188,12 @@ export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
 
       {/* Song arrangement */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
-        <button data-testid="song-mode" onClick={() => setSongMode(!songMode)} style={btn(songMode, CYBER.green)}>
+        <button data-testid="song-mode" onClick={() => { setSongMode(!songMode); if (!songMode) setSeqRecording(false); }} style={btn(songMode, CYBER.green)}>
           {songMode ? 'SONG ✓' : 'SONG'}
+        </button>
+        <button data-testid="auto-fills" onClick={() => setAutoFills(!autoFills)} style={btn(autoFills, CYBER.amber)}
+          title="Drum fill in the bar before each section change, crash on the new section">
+          FILLS
         </button>
         <div data-testid="song-chain" style={{ display: 'flex', gap: 3, overflowX: 'auto', flex: 1, minWidth: 0 }}>
           {songChain.map((sec, i) => {
@@ -205,10 +230,18 @@ export function SequencerGrid({ onToggleTransport }: SequencerGridProps) {
         <button data-testid="sequencer-play" onClick={onToggleTransport} style={btn(transportPlaying, CYBER.secondary)}>
           {transportPlaying ? '■ STOP' : '▶ PLAY'}
         </button>
-        <button onClick={() => setSelectedSlot(0)} style={btn(false, CYBER.secondary)}>WRITE FROM 1</button>
+        <button
+          data-testid="sequencer-rec"
+          onClick={() => { setSeqRecording(!seqRecording); if (!seqRecording) setSongMode(false); }}
+          title="Record chords in time over the beat — they snap to the nearest half bar"
+          style={btn(seqRecording, CYBER.primary)}
+        >
+          ● REC
+        </button>
+        <button onClick={() => setSelectedSlot(0)} style={btn(false, CYBER.secondary)}>STEP</button>
         <span style={{ flex: 1 }} />
         <button data-testid="sequencer-clear" onClick={clearSequence} style={btn(false, CYBER.primary)} disabled={!hasAny}>
-          CLEAR {SECTION_NAMES[editSection]}
+          CLEAR
         </button>
       </div>
     </div>

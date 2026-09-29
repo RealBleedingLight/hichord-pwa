@@ -35,6 +35,7 @@ export interface LoopTrackAudio {
   left: Float32Array;
   right: Float32Array;
   gain: number;
+  pan?: number;
   muted: boolean;
 }
 
@@ -48,10 +49,13 @@ export function mixdown(tracks: (LoopTrackAudio | null)[], loopLength: number, r
   const right = new Float32Array(total);
   for (const t of tracks) {
     if (!t || t.muted) continue;
+    const angle = ((t.pan ?? 0) + 1) * Math.PI / 4;
+    const gl = t.gain * Math.cos(angle) * Math.SQRT2;
+    const gr = t.gain * Math.sin(angle) * Math.SQRT2;
     for (let i = 0; i < total; i++) {
       const j = i % loopLength;
-      left[i]! += (t.left[j] ?? 0) * t.gain;
-      right[i]! += (t.right[j] ?? 0) * t.gain;
+      left[i]! += (t.left[j] ?? 0) * gl;
+      right[i]! += (t.right[j] ?? 0) * gr;
     }
   }
   let peak = 0;

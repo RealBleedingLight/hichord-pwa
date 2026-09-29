@@ -1,6 +1,7 @@
 // src/components/ChordDisplay.tsx
-import { useEffect, useRef } from 'react';
-import { useAppStore } from '@/store';
+import { useMemo } from 'react';
+import { useAppStore, SECTION_NAMES } from '@/store';
+import { getChord } from '@/music/chord-engine';
 import { CYBER } from '@/theme';
 
 const MODE_HINTS: Record<string, string> = {
@@ -28,7 +29,7 @@ function MiniKeyboard({ midi }: { midi: number[] }) {
   for (let m = KEYBOARD_START; m < KEYBOARD_START + KEYBOARD_KEYS; m++) if (!BLACK.has(m % 12)) whites.push(m);
   const w = 100 / whites.length;
   return (
-    <svg viewBox="0 0 100 24" preserveAspectRatio="none" style={{ width: '100%', height: 44 }} aria-hidden>
+    <svg viewBox="0 0 100 24" preserveAspectRatio="none" style={{ width: '100%', height: 64 }} aria-hidden>
       {whites.map((m, i) => (
         <rect key={m} x={i * w + 0.15} y={0} width={w - 0.3} height={24} rx={0.6}
           fill={lit.has(m) ? CYBER.primary : '#262626'} />
@@ -45,49 +46,57 @@ function MiniKeyboard({ midi }: { midi: number[] }) {
   );
 }
 
-function Oscilloscope({ getAnalyser }: { getAnalyser?: () => AnalyserNode | null }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx2d = canvas?.getContext('2d');
-    if (!canvas || !ctx2d || !getAnalyser) return;
-    let raf = 0;
-    let data: Float32Array | null = null;
-    const draw = () => {
-      raf = requestAnimationFrame(draw);
-      const analyser = getAnalyser();
-      const { width, height } = canvas;
-      ctx2d.clearRect(0, 0, width, height);
-      ctx2d.strokeStyle = CYBER.primary;
-      ctx2d.lineWidth = 2;
-      ctx2d.beginPath();
-      if (!analyser) {
-        ctx2d.moveTo(0, height / 2);
-        ctx2d.lineTo(width, height / 2);
-      } else {
-        if (!data || data.length !== analyser.fftSize) data = new Float32Array(analyser.fftSize);
-        analyser.getFloatTimeDomainData(data as Float32Array<ArrayBuffer>);
-        // Start at a rising zero crossing so the trace holds still.
-        let start = 0;
-        for (let i = 1; i < data.length / 2; i++) {
-          if (data[i - 1]! < 0 && data[i]! >= 0) { start = i; break; }
-        }
-        const span = data.length / 2;
-        for (let i = 0; i < span; i++) {
-          const x = (i / span) * width;
-          const y = height / 2 - (data[start + i] ?? 0) * height * 0.9;
-          if (i === 0) ctx2d.moveTo(x, y); else ctx2d.lineTo(x, y);
-        }
-      }
-      ctx2d.stroke();
-    };
-    draw();
-    return () => cancelAnimationFrame(raf);
-  }, [getAnalyser]);
-  return <canvas ref={canvasRef} width={400} height={80} style={{ width: '100%', height: 44, display: 'block' }} />;
+/**
+ * The last chords you played, oldest → newest. Jam until something sounds
+ * good, then send it to the sequencer in one tap.
+ */
+function RecentChords() {
+  const recent = useAppStore((s) => s.recentChords);
+  const key = useAppStore((s) => s.key);
+  const scale = useAppStore((s) => s.scale);
+  const joystickMode = useAppStore((s) => s.joystickMode);
+  const editSection = useAppStore((s) => s.editSection);
+  const capture = useAppStore((s) => s.captureRecentToSection);
+  const clear = useAppStore((s) => s.clearRecentChords);
+  const names = useMemo(
+    () => recent.map((c) => getChord(key, scale, c.degree, 4, c.direction, joystickMode, 0, 'off', []).displayName),
+    [recent, key, scale, joystickMode],
+  );
+  const btn: React.CSSProperties = {
+    height: 30, padding: '0 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, letterSpacing: 1,
+    cursor: 'pointer', touchAction: 'manipulation', flexShrink: 0, fontFamily: CYBER.fontMono,
+  };
+  return (
+    <div data-testid="recent-chords" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 4, minHeight: 30 }}>
+        {names.length === 0 && (
+          <span style={{ fontSize: 11, color: CYBER.textDim, alignSelf: 'center' }}>Recent chords show up here</span>
+        )}
+        {names.map((n, i) => (
+          <span key={i} style={{
+            flex: '1 1 0', minWidth: 0, textAlign: 'center', padding: '6px 2px', borderRadius: 5,
+            background: i === names.length - 1 ? '#3a0c14' : '#1c0707', border: '1px solid ' + CYBER.border,
+            color: CYBER.textLight, fontFamily: CYBER.fontDisplay, fontSize: 12, fontWeight: 700,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{n}</span>
+        ))}
+      </div>
+      {names.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+          <button data-testid="capture-recent" onClick={capture}
+            style={{ ...btn, background: CYBER.secondary, color: '#000', border: 'none' }}>
+            → SEQ {SECTION_NAMES[editSection]}
+          </button>
+          <button onClick={clear} style={{ ...btn, background: 'transparent', color: CYBER.textMid, border: '1px solid ' + CYBER.border }}>
+            CLEAR
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
-export function ChordDisplay({ getAnalyser }: { getAnalyser?: () => AnalyserNode | null }) {
+export function ChordDisplay() {
   const chordName = useAppStore((s) => s.currentChordName);
   const chordMidi = useAppStore((s) => s.currentChordMidi);
   const playMode = useAppStore((s) => s.playMode);
@@ -125,9 +134,7 @@ export function ChordDisplay({ getAnalyser }: { getAnalyser?: () => AnalyserNode
 
       <MiniKeyboard midi={chordMidi} />
 
-      <div style={{ width: '100%', background: CYBER.bg, border: '1px solid ' + CYBER.border, borderRadius: 6, overflow: 'hidden' }}>
-        <Oscilloscope getAnalyser={getAnalyser} />
-      </div>
+      <RecentChords />
 
       <div style={{ fontSize: 12, color: CYBER.textDim, textAlign: 'center', lineHeight: 1.4 }}>
         {hasPlayed ? (

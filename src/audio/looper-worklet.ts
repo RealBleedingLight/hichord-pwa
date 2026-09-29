@@ -22,6 +22,7 @@ class LooperProcessor extends AudioWorkletProcessor {
         recordStart: 0,
         recorded: 0,
         gain: 1.0,
+        pan: 0,
         muted: false,
       });
     }
@@ -89,6 +90,9 @@ class LooperProcessor extends AudioWorkletProcessor {
           }
         }
         break;
+      case 'setPan':
+        this.tracks[msg.trackIndex].pan = msg.pan;
+        break;
       case 'setGain':
         this.tracks[msg.trackIndex].gain = msg.gain;
         break;
@@ -110,7 +114,7 @@ class LooperProcessor extends AudioWorkletProcessor {
           requestId: msg.requestId,
           loopLength: this.loopLength,
           tracks: this.tracks.map((t) => t.hasAudio
-            ? { left: t.left.slice(), right: t.right.slice(), gain: t.gain, muted: t.muted }
+            ? { left: t.left.slice(), right: t.right.slice(), gain: t.gain, pan: t.pan, muted: t.muted }
             : null),
         });
         break;
@@ -122,7 +126,7 @@ class LooperProcessor extends AudioWorkletProcessor {
           t.recording = false;
           if (data && data.left.length === msg.loopLength) {
             t.left = data.left; t.right = data.right; t.hasAudio = true;
-            t.gain = data.gain; t.muted = data.muted;
+            t.gain = data.gain; t.pan = data.pan || 0; t.muted = data.muted;
           } else {
             t.left = null; t.right = null; t.hasAudio = false;
           }
@@ -167,9 +171,16 @@ class LooperProcessor extends AudioWorkletProcessor {
             this.port.postMessage({ type: 'recordingDone', trackIndex: ti });
           }
         } else if (this.playing && track.hasAudio && !track.muted) {
-          const g = track.gain;
-          outL[i] += track.left[pos] * g;
-          if (outR !== outL) outR[i] += track.right[pos] * g;
+          // Equal-power pan, normalised so centre = unity.
+          const angle = (track.pan + 1) * Math.PI / 4;
+          const gl = track.gain * Math.cos(angle) * Math.SQRT2;
+          const gr = track.gain * Math.sin(angle) * Math.SQRT2;
+          if (outR !== outL) {
+            outL[i] += track.left[pos] * gl;
+            outR[i] += track.right[pos] * gr;
+          } else {
+            outL[i] += track.left[pos] * track.gain;
+          }
         }
       }
     }

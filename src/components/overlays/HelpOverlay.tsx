@@ -9,7 +9,7 @@ const STEPS: [string, string][] = [
   ['Colour them', 'While holding, touch the pad on the left: up = major↔minor, right = maj7, down = sus4… each zone is labelled.'],
   ['Pick a sound', 'SOUND: instrument, envelope, effects and presets. The keys stay playable while the menu is open.'],
   ['Add a beat', 'Press ▶ on the bottom bar. Choose / edit the groove in MODE → BEATS.'],
-  ['Write a progression', 'MODE → SEQ: tap slot 1, then press 4–8 chord keys. Use sections A–D for verse/chorus and SONG to chain them. ▶ plays it with the beat.'],
+  ['Write a progression', 'Jam, then tap → SEQ under “recent chords” on the home screen. Or MODE → SEQ: ● REC and play in time over the beat, or STEP-enter chords. Sections A–D + SONG for verse/chorus.'],
   ['Layer loops', 'Press ● to record a loop (1-bar count-in, or on the next bar if the beat is running). Each new ● adds a synced layer. Loops are saved; export WAV in MODE → LOOPER.'],
 ];
 

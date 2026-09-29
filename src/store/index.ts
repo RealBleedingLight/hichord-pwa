@@ -29,6 +29,11 @@ export function currentSection(s: Pick<AppState, 'sections' | 'editSection'>): S
 
 export interface MixLevels { synth: number; beat: number; loops: number }
 
+export type ReverbType = 'room' | 'hall' | 'plate';
+/** Audio buffer size trade-off: lower = less delay between touch and sound, more risk of crackle. */
+export type AudioLatency = 'lowest' | 'balanced' | 'safe';
+export const MAX_RECENT_CHORDS = SEQUENCE_SLOTS;
+
 export interface Toast {
   id: number;
   text: string;
@@ -95,6 +100,19 @@ export interface AppState {
   vocoderGate: number;
   vocoderMicOn: boolean;
 
+  /** Last chords played live (newest last), for capturing a jam into a section. */
+  recentChords: SequenceSlot[];
+  /** Live-record chord presses into the edited section while the transport runs. */
+  seqRecording: boolean;
+  reverbType: ReverbType;
+  /** Per section: null = the main (edited) beat, or a variation index of the current genre. */
+  sectionBeats: (number | null)[];
+  /** Drum fill in the last bar before a section change, plus a crash on the new section. */
+  autoFills: boolean;
+  audioLatency: AudioLatency;
+  /** Measured output latency of the current audio engine (ms), for display. */
+  measuredLatencyMs: number;
+
   looperState: LooperState;
   looperTracks: LooperTrack[];
   looperBars: number;
@@ -153,6 +171,17 @@ export interface AppState {
   setMidiOutputs: (outputs: { id: string; name: string }[]) => void;
   setUserKitSounds: (sounds: DrumHit['sound'][]) => void;
   setVocoder: (update: Partial<Pick<AppState, 'vocoderFormant' | 'vocoderGate' | 'vocoderMicOn'>>) => void;
+  pushRecentChord: (slot: SequenceSlot) => void;
+  /** Re-colours the newest recent chord (the pad moved while it was held). */
+  updateRecentChord: (slot: SequenceSlot) => void;
+  clearRecentChords: () => void;
+  /** Writes the recent chords into the edited section, one per slot. */
+  captureRecentToSection: () => void;
+  setSeqRecording: (on: boolean) => void;
+  setReverbType: (type: ReverbType) => void;
+  setSectionBeat: (section: number, variation: number | null) => void;
+  setAutoFills: (on: boolean) => void;
+  setAudioLatency: (latency: AudioLatency) => void;
   /** True while recorded loops pin the tempo (changing it would drift them off the beat). */
   tempoLocked: () => boolean;
   clearBeat: () => void;
@@ -206,7 +235,7 @@ const PERSISTED_KEYS = [
   'adsr', 'effects', 'bpm', 'drumKit', 'arpPattern', 'arpRate', 'arpChordMode', 'strumSpeed',
   'beatEnabled', 'beatGenre', 'beatVariation', 'beatHits', 'beatEdited', 'sections', 'editSection',
   'songChain', 'songMode', 'sequenceEnabled', 'beatSwing', 'mix', 'midiEnabled', 'midiOutputId',
-  'vocoderFormant', 'vocoderGate',
+  'vocoderFormant', 'vocoderGate', 'reverbType', 'sectionBeats', 'autoFills', 'audioLatency',
   'looperBars', 'metronomeOn', 'volume',
 ] as const satisfies readonly (keyof AppState)[];
 
@@ -275,7 +304,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   synthMode: 'analog',
   waveform: 'sawtooth',
   fmPresetIndex: 0,
-  sampleName: 'keys',
+  sampleName: 'piano',
   micSampleAvailable: false,
   adsr: { attack: 20, decay: 100, sustain: 0.7, release: 300 },
 
@@ -309,6 +338,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   vocoderFormant: 0,
   vocoderGate: 0.02,
   vocoderMicOn: false,
+  recentChords: [],
+  seqRecording: false,
+  reverbType: 'hall',
+  sectionBeats: SECTION_NAMES.map(() => null),
+  autoFills: true,
+  audioLatency: 'balanced',
+  measuredLatencyMs: 0,
   sequenceEnabled: true,
   selectedSlot: null,
 
@@ -423,6 +459,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   setMidiOutputs: (midiOutputs) => set({ midiOutputs }),
   setUserKitSounds: (userKitSounds) => set({ userKitSounds }),
   setVocoder: (update) => set(update),
+  pushRecentChord: (slot) => set((s) => ({ recentChords: [...s.recentChords, slot].slice(-MAX_RECENT_CHORDS) })),
+  updateRecentChord: (slot) => set((s) => (s.recentChords.length === 0 ? {} : {
+    recentChords: [...s.recentChords.slice(0, -1), slot],
+  })),
+  clearRecentChords: () => set({ recentChords: [] }),
+  captureRecentToSection: () => set((s) => {
+    const slots: Section = Array.from({ length: SEQUENCE_SLOTS }, (_, i) => s.recentChords[i] ?? null);
+    return {
+      sections: s.sections.map((sec, i) => (i === s.editSection ? slots : sec)),
+      toast: { id: ++toastId, text: `${s.recentChords.length} chords → section ${SECTION_NAMES[s.editSection]}` },
+    };
+  }),
+  setSeqRecording: (seqRecording) => set({ seqRecording }),
+  setReverbType: (reverbType) => set({ reverbType }),
+  setSectionBeat: (section, variation) => set((s) => {
+    const sectionBeats = [...s.sectionBeats];
+    sectionBeats[section] = variation;
+    return { sectionBeats };
+  }),
+  setAutoFills: (autoFills) => set({ autoFills }),
+  // The engine is rebuilt for a new buffer size; loops are reloaded from storage, stopped.
+  setAudioLatency: (audioLatency) => set({ audioLatency, looperState: 'off', looperPhase: 0 }),
   tempoLocked: () => get().looperTracks.some((t) => t.state === 'playing' || t.state === 'muted'),
   setSequenceEnabled: (sequenceEnabled) => set({ sequenceEnabled }),
   setSelectedSlot: (selectedSlot) => set({ selectedSlot }),

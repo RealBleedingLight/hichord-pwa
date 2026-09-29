@@ -48,6 +48,35 @@ const VOICE_CONTROLS: { type: EffectType; label: string }[] = [
 
 const VOICE_LIMITS = [1, 2, 3, 4, 6];
 
+function LatencySection() {
+  const audioLatency = useAppStore((s) => s.audioLatency);
+  const setAudioLatency = useAppStore((s) => s.setAudioLatency);
+  const measured = useAppStore((s) => s.measuredLatencyMs);
+  const options = [
+    { value: 'lowest' as const, label: 'LOWEST', help: 'fastest response, may crackle on slow phones' },
+    { value: 'balanced' as const, label: 'BALANCED', help: 'recommended' },
+    { value: 'safe' as const, label: 'SAFE', help: 'most stable, slower response' },
+  ];
+  const current = options.find((o) => o.value === audioLatency);
+  return (
+    <div style={sectionStyle}>
+      <div style={sectionLabelStyle(ACCENT)}>
+        Touch → sound delay{' '}
+        <span style={{ textTransform: 'none', fontWeight: 400, color: '#999' }}>
+          {measured > 0 ? `— output ≈ ${measured} ms` : ''} · {current?.help}
+        </span>
+      </div>
+      <div style={rowStyle}>
+        {options.map((o) => (
+          <button key={o.value} data-testid={`latency-${o.value}`} style={chipStyle(audioLatency === o.value, ACCENT)} onClick={() => setAudioLatency(o.value)}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MidiSection() {
   const midiEnabled = useAppStore((s) => s.midiEnabled);
   const setMidiEnabled = useAppStore((s) => s.setMidiEnabled);
@@ -185,6 +214,8 @@ export function YellowOverlay() {
   const setEffect = useAppStore((s) => s.setEffect);
   const adsr = useAppStore((s) => s.adsr);
   const setAdsr = useAppStore((s) => s.setAdsr);
+  const reverbType = useAppStore((s) => s.reverbType);
+  const setReverbType = useAppStore((s) => s.setReverbType);
 
   return (
     <div>
@@ -383,7 +414,16 @@ export function YellowOverlay() {
             );
           })}
         </div>
+        <div style={{ ...rowStyle, alignItems: 'center', marginTop: 4 }}>
+          <span style={{ fontSize: 10, minWidth: 52, color: LABEL_COLOR }}>SPACE</span>
+          {(['room', 'hall', 'plate'] as const).map((t) => (
+            <button key={t} data-testid={`reverb-${t}`} style={chipStyle(reverbType === t, ACCENT)} onClick={() => setReverbType(t)}>
+              {t.toUpperCase()}
+            </button>
+          ))}
+        </div>
       </div>
+      <LatencySection />
       <MidiSection />
     </div>
   );

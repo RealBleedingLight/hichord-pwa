@@ -17,12 +17,11 @@ export interface CenterAreaProps {
   sequencerGridProps: SequencerGridProps;
   onChordTrigger?: (voicing: ChordVoicing) => void;
   onSampleCaptured?: (buffer: AudioBuffer, pitchHz: number | null) => void;
-  getAnalyser?: () => AnalyserNode | null;
   /** The engine's AudioContext, so mic tools don't spin up their own. */
   getAudioContext?: () => AudioContext | null;
 }
 
-export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps, onChordTrigger, onSampleCaptured, getAnalyser, getAudioContext }: CenterAreaProps) {
+export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps, onChordTrigger, onSampleCaptured, getAudioContext }: CenterAreaProps) {
   const mode = useAppStore((s) => s.playMode);
 
   if (mode === 'drum' || mode === 'drumLoops' || mode === 'autoDrum') {
@@ -57,5 +56,5 @@ export function CenterArea({ drumViewProps, looperViewProps, sequencerGridProps,
     return <EarTrainer onChordTrigger={onChordTrigger} />;
   }
 
-  return <ChordDisplay getAnalyser={getAnalyser} />;
+  return <ChordDisplay />;
 }

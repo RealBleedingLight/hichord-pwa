@@ -8,7 +8,7 @@ export function calculateLoopLength(bars: number, bpm: number, sampleRate: numbe
 
 export interface LoopSnapshot {
   loopLength: number;
-  tracks: ({ left: Float32Array; right: Float32Array; gain: number; muted: boolean } | null)[];
+  tracks: ({ left: Float32Array; right: Float32Array; gain: number; pan?: number; muted: boolean } | null)[];
 }
 
 export type LooperEvent =
@@ -99,6 +99,10 @@ export class LooperController {
 
   setTrackGain(trackIndex: number, gain: number): void {
     this.workletNode?.port.postMessage({ type: 'setGain', trackIndex, gain });
+  }
+
+  setTrackPan(trackIndex: number, pan: number): void {
+    this.workletNode?.port.postMessage({ type: 'setPan', trackIndex, pan: Math.max(-1, Math.min(1, pan)) });
   }
 
   muteTrack(trackIndex: number): void {

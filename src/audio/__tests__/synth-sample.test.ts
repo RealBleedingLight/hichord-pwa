@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { singleZone } from '@/audio/instruments';
 import { SampleSynth } from '@/audio/synth-sample';
 import { ADSR_PRESETS } from '@/audio/types';
 
@@ -25,7 +26,7 @@ describe('SampleSynth', () => {
       { midi: 67, frequency: 392.00, name: 'G4', octave: 4 },
     ];
 
-    synth.trigger(notes, ADSR_PRESETS.TOUCH, sampleBuffer);
+    synth.trigger(notes, ADSR_PRESETS.TOUCH, singleZone(sampleBuffer, 60));
 
     const buffer = await ctx.startRendering();
     const data = buffer.getChannelData(0);
@@ -45,7 +46,7 @@ describe('SampleSynth', () => {
       { midi: 60, frequency: 261.63, name: 'C4', octave: 4 },
     ];
 
-    synth.trigger(notes, ADSR_PRESETS.SHORT, sampleBuffer);
+    synth.trigger(notes, ADSR_PRESETS.SHORT, singleZone(sampleBuffer, 60));
     synth.stop();
 
     const buffer = await ctx.startRendering();

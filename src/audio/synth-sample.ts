@@ -3,6 +3,7 @@ import type { ADSREnvelope } from './types';
 import { applyAttack, voiceLevel } from './envelope';
 import { VoiceSet } from './voice-set';
 import { DEFAULT_SHAPING, panFor, setPitch, type VoiceShaping } from './shaping';
+import { zoneFor, type SampleSet } from './instruments';
 
 export class SampleSynth {
   private ctx: BaseAudioContext;
@@ -10,7 +11,7 @@ export class SampleSynth {
   private voices: VoiceSet;
   private sampleCache: Map<string, AudioBuffer> = new Map();
   private shaping: VoiceShaping = DEFAULT_SHAPING;
-  private lastRates: number[] = [];
+  private lastMidis: number[] = [];
 
   constructor(ctx: BaseAudioContext, output: AudioNode) {
     this.ctx = ctx;
@@ -37,26 +38,34 @@ export class SampleSynth {
   }
 
   /**
-   * Plays `sampleBuffer` once per note, pitch-shifted from `rootMidi` (the
-   * pitch the sample was recorded at) to each note.
+   * Plays each note from the instrument zone nearest to it, pitch-shifted
+   * from that zone's root. Sustaining instruments loop while held.
    */
-  trigger(notes: Note[], adsr: ADSREnvelope, sampleBuffer: AudioBuffer, when?: number, rootMidi = 60, spread = 0): void {
+  trigger(notes: Note[], adsr: ADSREnvelope, set: SampleSet, when?: number, spread = 0): void {
     const now = Math.max(when ?? 0, this.ctx.currentTime);
     this.voices.cut(now);
     const playable = notes.filter((n) => n && Number.isFinite(n.midi)).slice(0, Math.min(6, this.shaping.maxNotes));
     const count = playable.length;
     // Samples are normalised mono, so give them the same headroom as two oscillators.
     const level = voiceLevel(count) * 2;
-    const rates: number[] = [];
+    const midis: number[] = [];
     const vibrato = this.shaping.vibrato;
 
     playable.forEach((note, i) => {
       const start = now + i * spread;
+      const zone = zoneFor(set, note.midi);
       const source = this.ctx.createBufferSource();
-      source.buffer = sampleBuffer;
-      const rate = Math.pow(2, (note.midi - rootMidi) / 12);
-      setPitch(source.playbackRate, rate, start, this.lastRates[i], this.shaping.glide);
-      rates.push(rate);
+      source.buffer = zone.buffer;
+      if (set.loop) {
+        source.loop = true;
+        source.loopStart = set.loop.start;
+        source.loopEnd = set.loop.end;
+      }
+      const rate = Math.pow(2, (note.midi - zone.rootMidi) / 12);
+      const prev = this.lastMidis[i];
+      const fromRate = prev === undefined ? undefined : Math.pow(2, (prev - zone.rootMidi) / 12);
+      setPitch(source.playbackRate, rate, start, fromRate, this.shaping.glide);
+      midis.push(note.midi);
       vibrato?.connect(source.detune);
 
       const envGain = this.ctx.createGain();
@@ -74,7 +83,7 @@ export class SampleSynth {
         dispose: vibrato ? () => { try { vibrato.disconnect(source.detune); } catch { /* gone */ } } : undefined,
       });
     });
-    this.lastRates = rates;
+    this.lastMidis = midis;
   }
 
   release(adsr: ADSREnvelope, when?: number): void {

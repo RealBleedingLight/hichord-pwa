@@ -97,16 +97,25 @@ The product only needs to do one thing well: **get from "I have an idea" to "I'm
 - **Every knob is de-zippered:** filter, reverb, delay, chorus and the rest glide over about 15 ms instead of jumping. So do master volume and the mix levels.
 - **Voices clean up after themselves,** including their vibrato connections, so long sessions don't slowly get heavier.
 
+## Round 3: smoothness and sound
+
+- **The oscilloscope is gone.** It was a tiny squiggle with nothing to act on. That space now holds **recent chords**: the last 8 chords you played, including pad colours. **→ SEQ** writes them straight into the section you're editing, so you can jam and then keep what you played.
+- **Real-time recording:** ● REC in the sequencer. With the beat running, chord presses snap to the nearest half-bar slot of the section. Holding the pad while you play records the colour too. While you hold a chord, the sequence doesn't also play that slot, so it isn't doubled.
+- **Reverb:** the old impulse response was plain decaying white noise, which sounded bright, metallic and hissy. There are now **Room / Hall / Plate** impulse responses. Each has pre-delay, early reflections and decorrelated stereo, and high frequencies decay faster than lows. Switching type lets the old tail finish instead of cutting it off.
+- **Instruments are multi-sampled** (one zone per octave), so a note is never shifted by more than half an octave. There are three new ones:
+  - **Piano:** stiff-string model with two detuned strings per note and a hammer thump.
+  - **Strings:** three players with slow shimmer.
+  - **Organ:** drawbars plus key click.
+
+  Strings, organ and pad **loop while held**, instead of dying out after 4 s. The guitar zones are tuned to the exact pitch the string model produces; it was up to 35 cents flat before. Instruments are rendered in the background at idle, so picking one is instant.
+- **Looper:** per-track volume and **pan** (saved, and applied to the WAV export), plus **↶ UNDO**, which removes the most recent layer.
+- **Beat:** each section can use its own groove variation (for example, a busier beat on the chorus). **FILLS** (on by default) plays the groove for half a bar and then a high → mid → low tom run in the 4th bar of each section, with a crash on the next downbeat.
+- **Latency:** the SOUND menu has a **Lowest / Balanced / Safe** audio-buffer setting and shows the measured output delay. In Chromium, Lowest brings the buffer down from 10 ms to 2.9 ms (about 11 ms total output). Changing it rebuilds the audio engine live: everything is re-applied, loops are reloaded from storage, and the transport picks up again.
+
 ## Still open (ranked)
 
-What's left for a smooth, seamless feel:
-
-1. **Touch-to-sound latency on Android.** Measure it on a real device. If it's high, move to `pointerrawupdate`, a smaller `latencyHint` (for example 0.01), and AudioWorklet-based voices.
-2. **Real-time progression recording:** play chords over the beat and have them quantised into the section, as an alternative to step entry.
-3. **Better instruments:** real multi-sampled piano, strings and guitar, loaded on demand. The procedural ones are fine for sketching.
-4. **Reverb quality:** the reverb's impulse response is plain decaying noise. A designed plate or hall would sound much more polished.
-5. **Per-track loop volume and pan, and undo for the last overdub.**
-6. **A fill or crash into each new section, and per-section beat variations** (a busier groove on the chorus).
-7. **Time-stretched loops,** so tempo could stay unlocked.
-8. **MIDI clock out and MIDI input** for playing the chords from a controller.
-9. **Chord Hero and Ear Trainer** weren't reworked this round.
+1. **Measure touch-to-sound on your actual phone** with the Lowest setting. If there's still lag, the next step is AudioWorklet-based voices.
+2. **Time-stretched loops,** so tempo doesn't have to lock.
+3. **MIDI clock out and MIDI input** (play the chords from a controller).
+4. **Chord Hero and Ear Trainer** haven't been reworked.
+5. **Real recorded instruments,** loaded on demand, if the procedural ones aren't enough.

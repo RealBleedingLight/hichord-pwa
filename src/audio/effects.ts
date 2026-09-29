@@ -1,4 +1,5 @@
 import { smoothSet } from './envelope';
+import { buildImpulseResponse, type ReverbKind } from './reverb-ir';
 import type { EffectType } from './types';
 
 export class EffectsChain {
@@ -27,6 +28,8 @@ export class EffectsChain {
   private delayDry: GainNode;
   private delayWet: GainNode;
   private reverbConvolver: ConvolverNode;
+  private reverbSend: GainNode | null = null;
+  private reverbKind: ReverbKind = 'hall';
   private reverbDry: GainNode;
   private reverbWet: GainNode;
   private stereoPanner: StereoPannerNode;
@@ -85,7 +88,7 @@ export class EffectsChain {
 
     // Reverb
     this.reverbConvolver = ctx.createConvolver();
-    this.reverbConvolver.buffer = this.generateImpulseResponse(2, 2);
+    this.reverbConvolver.buffer = buildImpulseResponse(ctx, this.reverbKind);
     this.reverbDry = ctx.createGain();
     this.reverbWet = ctx.createGain();
     this.reverbWet.gain.value = 0;
@@ -150,6 +153,7 @@ export class EffectsChain {
     // Reverb (wet/dry)
     delayMerge.connect(this.reverbDry);
     delayMerge.connect(this.reverbConvolver);
+    this.reverbSend = delayMerge;
     this.reverbConvolver.connect(this.reverbWet);
 
     // Merge reverb → stereo → output
@@ -168,16 +172,18 @@ export class EffectsChain {
     } catch { /* already started in offline context tests */ }
   }
 
-  private generateImpulseResponse(duration: number, decay: number): AudioBuffer {
-    const length = this.ctx.sampleRate * duration;
-    const buffer = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
-      const data = buffer.getChannelData(ch);
-      for (let i = 0; i < length; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
-      }
-    }
-    return buffer;
+  /** Swaps the reverb space. The old tail keeps ringing briefly so there's no cut-off. */
+  setReverbType(kind: ReverbKind): void {
+    if (kind === this.reverbKind || !this.reverbSend) return;
+    this.reverbKind = kind;
+    const next = this.ctx.createConvolver();
+    next.buffer = buildImpulseResponse(this.ctx, kind);
+    this.reverbSend.connect(next);
+    next.connect(this.reverbWet);
+    const old = this.reverbConvolver;
+    this.reverbSend.disconnect(old);
+    this.reverbConvolver = next;
+    setTimeout(() => { try { old.disconnect(); } catch { /* gone */ } }, 3000);
   }
 
   getInput(): AudioNode { return this.inputGain; }

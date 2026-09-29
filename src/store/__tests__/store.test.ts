@@ -79,4 +79,24 @@ describe('beat + sequence state', () => {
     useAppStore.getState().setLooperBars(12);
     expect(useAppStore.getState().looperBars).toBe(8);
   });
+
+  it('recent chords keep the last 8 and can be captured into the edited section', () => {
+    const s = useAppStore.getState();
+    s.clearRecentChords();
+    s.setEditSection(2);
+    for (let i = 0; i < 10; i++) s.pushRecentChord({ degree: ((i % 7) + 1) as 1, direction: 'center' });
+    s.updateRecentChord({ degree: 4, direction: 'right' });
+    const recent = useAppStore.getState().recentChords;
+    expect(recent).toHaveLength(8);
+    expect(recent[7]).toEqual({ degree: 4, direction: 'right' });
+    s.captureRecentToSection();
+    expect(useAppStore.getState().sections[2]).toEqual(recent);
+  });
+
+  it('section beats default to the main beat and can be overridden per section', () => {
+    const s = useAppStore.getState();
+    expect(s.sectionBeats.every((b) => b === null)).toBe(true);
+    s.setSectionBeat(1, 2);
+    expect(useAppStore.getState().sectionBeats[1]).toBe(2);
+  });
 });

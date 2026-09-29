@@ -18,6 +18,7 @@ import { getDB } from '@/db';
 import { encodeWav, mixdown, resample } from '@/audio/wav';
 import type { LoopSnapshot } from '@/audio/looper';
 import { directionLabel } from '@/music/chord-engine';
+import { getPatternsForGenre } from '@/data/drum-patterns';
 import '@/styles/global.css';
 
 export { stateToPreset, applyPresetToStore } from '@/data/preset-state';
@@ -70,6 +71,8 @@ export function App() {
   /** A downbeat time (AudioContext seconds) that the beat, sequence and loops all line up to. */
   const gridOriginRef = useRef<number | null>(null);
   const recordingTrackRef = useRef<number | null>(null);
+  /** Track indices in the order they were recorded (for undo). */
+  const recordOrderRef = useRef<number[]>([]);
   const uiTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   const drumKit = useAppStore((s) => s.drumKit);
@@ -89,11 +92,15 @@ export function App() {
   const transportPlaying = useAppStore((s) => s.transportPlaying);
   const joystickDirection = useAppStore((s) => s.joystickDirection);
   const joystickMode = useAppStore((s) => s.joystickMode);
+  const audioLatency = useAppStore((s) => s.audioLatency);
+  /** Bumped whenever the audio engine is (re)built, so engine-bound effects re-attach. */
+  const [engineGen, setEngineGen] = useState(0);
 
   // --- Engine lifecycle -----------------------------------------------------
 
   useEffect(() => {
-    const engine = new AudioEngine();
+    const latency = useAppStore.getState().audioLatency;
+    const engine = new AudioEngine(undefined, latency === 'lowest' ? 0 : latency === 'safe' ? 'playback' : 'interactive');
     engineRef.current = engine;
     const ctx = engine.getContext();
     const arpClock = new MasterClock(ctx);
@@ -111,9 +118,30 @@ export function App() {
 
     // Push the current (possibly restored) store state into the fresh engine.
     const s = useAppStore.getState();
+    // Everything the per-setting effects below would push, so a rebuilt engine
+    // (e.g. after changing the latency setting) sounds exactly like the old one.
     engine.setMasterVolume(s.volume);
     engine.setBpm(s.bpm);
+    engine.setSynthMode(s.synthMode);
+    engine.setWaveform(s.waveform);
+    engine.setAdsr(s.adsr);
+    engine.setFmPresetIndex(s.fmPresetIndex);
+    engine.setReverbType(s.reverbType);
+    for (const [type, fx] of Object.entries(s.effects)) engine.setEffect(type as keyof typeof s.effects, fx.enabled, fx.value);
+    engine.setMixLevel('synth', s.mix.synth);
+    engine.setMixLevel('beat', s.mix.beat);
+    engine.setMixLevel('loops', s.mix.loops);
+    if (s.synthMode === 'sample') engine.setSampleName(s.sampleName);
+    const handler = playModeHandlerRef.current!;
+    handler.setMode(s.playMode);
+    handler.setStrumSpeed(s.strumSpeed);
+    handler.setArpSettings(s.arpPattern, s.arpRate, s.arpChordMode);
+    transportClock.setSwing(s.beatSwing);
     drums.setKit(s.drumKit);
+    setEngineGen((g) => g + 1);
+    const reportLatency = () => useAppStore.setState({ measuredLatencyMs: engine.getLatencyMs() });
+    reportLatency();
+    const latencyTimer = setTimeout(reportLatency, 1500);
     for (const clock of [arpClock, transportClock, metronomeClock]) clock.setBpm(s.bpm);
 
     let disposed = false;
@@ -136,7 +164,7 @@ export function App() {
     }
 
     // Browsers start audio suspended until a user gesture; unlock on the first touch/key.
-    const unlock = () => { void engine.resume(); };
+    const unlock = () => { void engine.resume().then(reportLatency); };
     window.addEventListener('pointerdown', unlock, true);
     window.addEventListener('keydown', unlock, true);
 
@@ -147,11 +175,12 @@ export function App() {
       unsubscribeLooper?.();
       for (const clock of [arpClock, transportClock, metronomeClock]) clock.stop();
       for (const t of uiTimersRef.current) clearTimeout(t);
+      clearTimeout(latencyTimer);
       looperRef.current = null;
       engine.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [audioLatency]);
 
   /** Runs `fn` when AudioContext time `time` is actually heard, so the UI matches the audio. */
   const atAudioTime = useCallback((time: number, fn: () => void) => {
@@ -207,6 +236,21 @@ export function App() {
     midiRef.current.sendChord(chord);
   }, [buildChord, showChord]);
 
+  /**
+   * The half-bar slot nearest to "now" on the transport grid, i.e. where a
+   * chord played right now belongs. A press slightly early for the next slot
+   * lands on it, a press slightly late stays on the current one.
+   */
+  const currentSlotPosition = (): number | null => {
+    const ctx = engineRef.current?.getContext();
+    const origin = gridOriginRef.current;
+    if (!ctx || origin === null) return null;
+    const stepDur = 60 / useAppStore.getState().bpm / 4;
+    const steps = (ctx.currentTime - origin) / stepDur;
+    if (steps < -STEPS_PER_SLOT / 2) return null;
+    return ((Math.round(steps / STEPS_PER_SLOT) % SEQUENCE_SLOTS) + SEQUENCE_SLOTS) % SEQUENCE_SLOTS;
+  };
+
   const triggerChord = useCallback((degree: ScaleDegree) => {
     const engine = engineRef.current;
     if (!engine || !playModeHandlerRef.current) return;
@@ -223,6 +267,18 @@ export function App() {
     heldRef.current = [...heldRef.current.filter((d) => d !== degree), degree];
     setActiveKeys(new Set(heldRef.current));
     soundHeldChord('press');
+
+    state.pushRecentChord({ degree, direction: directionRef.current });
+
+    // Live recording: while the transport runs, snap the press to the nearest half-bar slot.
+    if (state.seqRecording && state.transportPlaying && !state.songMode) {
+      const slot = currentSlotPosition();
+      if (slot !== null) {
+        state.setSequenceSlot(slot, { degree, direction: directionRef.current });
+        lastWrittenSlotRef.current = slot;
+      }
+      return;
+    }
 
     // Step entry: with a sequence slot selected, pressing a chord writes it there.
     if (state.playMode === 'sequencer' && state.selectedSlot !== null) {
@@ -260,6 +316,9 @@ export function App() {
     const degree = heldRef.current[heldRef.current.length - 1];
     if (slot !== null && degree !== undefined && dir !== 'center') {
       useAppStore.getState().setSequenceSlot(slot, { degree, direction: dir });
+    }
+    if (degree !== undefined && dir !== 'center') {
+      useAppStore.getState().updateRecentChord({ degree, direction: dir });
     }
   }, [soundHeldChord]);
 
@@ -353,7 +412,27 @@ export function App() {
 
       if (s.beatEnabled) {
         const beatStep = rawStep % 16;
-        for (const hit of s.beatHits) {
+        const sectionIdx = s.songMode
+          ? s.songChain[Math.floor(rawStep / SECTION_STEPS) % s.songChain.length] ?? 0
+          : s.editSection;
+        const genre = getPatternsForGenre(s.beatGenre);
+        const variation = s.sectionBeats[sectionIdx];
+        let hits = variation !== null && variation !== undefined ? genre[variation]?.hits ?? s.beatHits : s.beatHits;
+        const barInSection = Math.floor(step / 16);
+        if (s.autoFills) {
+          // Fill in the 4th bar of each section pass, crash into the next one.
+          if (barInSection === 3) {
+            // Groove for the first half of the bar, then a tom run from high to low.
+            const fill = (genre.find((pt) => pt.variation === 'Fills')?.hits ?? []).filter((h) => h.step >= 8);
+            const toms = fill.filter((h) => h.sound === 'tom').sort((a, b) => a.step - b.step);
+            const run = toms.map((h, i) => ({
+              ...h, sound: (i < toms.length / 3 ? 'tomHigh' : i < (2 * toms.length) / 3 ? 'tom' : 'tomLow') as DrumSound,
+            }));
+            hits = [...hits.filter((h) => h.step < 8), ...fill.filter((h) => h.sound !== 'tom'), ...run];
+          }
+          if (step === 0 && rawStep > 0) drumEngineRef.current?.triggerDrum('crash', time, 0.8);
+        }
+        for (const hit of hits) {
           if (hit.step === beatStep) drumEngineRef.current?.triggerDrum(hit.sound, time, hit.velocity);
         }
       }
@@ -361,7 +440,8 @@ export function App() {
       if (s.sequenceEnabled && rawStep % STEPS_PER_SLOT === 0) {
         const globalSlot = rawStep / STEPS_PER_SLOT;
         const slot = slotAt(s, globalSlot);
-        if (slot) {
+        // While live-recording, the chord being held is already sounding — don't double it.
+        if (slot && !(s.seqRecording && heldRef.current.length > 0)) {
           // Hold until the next filled slot (empty slots tie the chord over).
           const horizon = SEQUENCE_SLOTS * (s.songMode ? s.songChain.length : 1);
           let slots = 1;
@@ -382,7 +462,7 @@ export function App() {
       useAppStore.getState().setTransportStep(null);
       useAppStore.getState().setPlayingSection(null);
     };
-  }, [transportPlaying, atAudioTime, buildChord, showChord, nextGridTime]);
+  }, [transportPlaying, atAudioTime, buildChord, showChord, nextGridTime, engineGen]);
 
   const toggleTransport = useCallback(() => {
     const s = useAppStore.getState();
@@ -403,7 +483,7 @@ export function App() {
       unsubscribe();
       clock.stop();
     };
-  }, [playMode]);
+  }, [playMode, engineGen]);
 
   const handleTriggerDrum = useCallback((sound: DrumSound) => {
     void engineRef.current?.resume();
@@ -483,7 +563,8 @@ export function App() {
       // Loops dictate the tempo: set it before the tracks lock it.
       useAppStore.setState({ bpm: saved.bpm, looperBars: saved.bars });
       const s = useAppStore.getState();
-      tracks.forEach((t, i) => s.setLooperTrack(i, { state: t ? (t.muted ? 'muted' : 'playing') : 'empty', gain: t?.gain ?? 1 }));
+      tracks.forEach((t, i) => s.setLooperTrack(i, { state: t ? (t.muted ? 'muted' : 'playing') : 'empty', gain: t?.gain ?? 1, pan: t?.pan ?? 0 }));
+      recordOrderRef.current = tracks.flatMap((t, i) => (t ? [i] : []));
       const firstEmpty = tracks.findIndex((t) => !t);
       s.setActiveTrack(firstEmpty >= 0 ? firstEmpty : 0);
       s.showToast(`Restored ${tracks.filter(Boolean).length} loop layer(s) — ▶ to play`);
@@ -541,6 +622,7 @@ export function App() {
         const next = useAppStore.getState().looperTracks.find((t) => t.state === 'empty');
         if (next) s.setActiveTrack(next.index);
         s.showToast(`Track ${e.trackIndex + 1} recorded`);
+        recordOrderRef.current = [...recordOrderRef.current.filter((i) => i !== e.trackIndex), e.trackIndex];
         persistLoops();
         break;
       }
@@ -699,6 +781,32 @@ export function App() {
     persistLoops();
   }, [stopMetronome, persistLoops]);
 
+  const handleTrackMix = useCallback((trackIndex: number, update: { gain?: number; pan?: number }) => {
+    const looper = looperRef.current;
+    if (!looper) return;
+    if (update.gain !== undefined) looper.setTrackGain(trackIndex, update.gain);
+    if (update.pan !== undefined) looper.setTrackPan(trackIndex, update.pan);
+    useAppStore.getState().setLooperTrack(trackIndex, update);
+    persistLoops();
+  }, [persistLoops]);
+
+  /** Removes the most recently recorded layer. */
+  const handleLooperUndo = useCallback(() => {
+    const s = useAppStore.getState();
+    const withAudio = new Set(s.looperTracks.filter((t) => t.state === 'playing' || t.state === 'muted').map((t) => t.index));
+    while (recordOrderRef.current.length > 0 && !withAudio.has(recordOrderRef.current[recordOrderRef.current.length - 1]!)) {
+      recordOrderRef.current.pop();
+    }
+    const last = recordOrderRef.current.pop();
+    if (last === undefined) {
+      s.showToast('Nothing to undo');
+      return;
+    }
+    handleLooperTrackClear(last);
+    s.setActiveTrack(last);
+    s.showToast(`Removed track ${last + 1}`);
+  }, [handleLooperTrackClear]);
+
   const handleTrackSelect = useCallback((index: number) => {
     useAppStore.getState().setActiveTrack(index);
   }, []);
@@ -747,7 +855,37 @@ export function App() {
   useEffect(() => { engineRef.current?.setWaveform(waveform); }, [waveform]);
   useEffect(() => { engineRef.current?.setAdsr(adsr); }, [adsr]);
   useEffect(() => { engineRef.current?.setFmPresetIndex(fmPresetIndex); }, [fmPresetIndex]);
-  useEffect(() => { engineRef.current?.setSampleName(sampleName); }, [sampleName]);
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine || synthMode !== 'sample') return;
+    if (engine.isInstrumentReady(sampleName)) {
+      engine.setSampleName(sampleName);
+      return;
+    }
+    // Rendering takes a moment; let the "loading" message paint first.
+    useAppStore.getState().showToast(`Loading ${sampleName.toUpperCase()}…`);
+    const t = setTimeout(() => engine.setSampleName(sampleName), 40);
+    return () => clearTimeout(t);
+  }, [sampleName, synthMode]);
+
+  // Pre-render the likely instruments while the app is idle, so picking them is instant.
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const queue = [useAppStore.getState().sampleName, 'piano', 'strings', 'keys'];
+    const idle = (cb: () => void) => ('requestIdleCallback' in window
+      ? (window as Window & { requestIdleCallback: (cb: () => void) => number }).requestIdleCallback(cb)
+      : setTimeout(cb, 500));
+    let cancelled = false;
+    const next = () => {
+      const name = queue.shift();
+      if (!name || cancelled) return;
+      engine.prepareInstrument(name);
+      idle(next);
+    };
+    const t = setTimeout(() => idle(next), 1500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, []);
 
   useEffect(() => {
     const engine = engineRef.current;
@@ -758,6 +896,9 @@ export function App() {
   }, [effects]);
 
   // --- Groove, mix, MIDI ---------------------------------------------------------
+
+  const reverbType = useAppStore((s) => s.reverbType);
+  useEffect(() => { engineRef.current?.setReverbType(reverbType); }, [reverbType]);
 
   const beatSwing = useAppStore((s) => s.beatSwing);
   useEffect(() => { transportClockRef.current?.setSwing(beatSwing); }, [beatSwing]);
@@ -878,7 +1019,7 @@ export function App() {
       stopVocoderMic();
       if (useAppStore.getState().vocoderMicOn) useAppStore.getState().setVocoder({ vocoderMicOn: false });
     }
-  }, [playMode, stopVocoderMic]);
+  }, [playMode, stopVocoderMic, engineGen]);
 
   useEffect(() => {
     const engine = engineRef.current;
@@ -899,14 +1040,14 @@ export function App() {
         useAppStore.getState().setVocoder({ vocoderMicOn: false });
       });
     return () => { cancelled = true; };
-  }, [vocoderMicOn, playMode, stopVocoderMic]);
+  }, [vocoderMicOn, playMode, stopVocoderMic, engineGen]);
 
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || playMode !== 'vocoder') return;
     engine.getVocoder().setFormantShift(vocoderFormant);
     engine.getVocoder().setGateThreshold(vocoderGate);
-  }, [vocoderFormant, vocoderGate, playMode]);
+  }, [vocoderFormant, vocoderGate, playMode, engineGen]);
 
   // --- Keyboard ------------------------------------------------------------------
 
@@ -938,7 +1079,6 @@ export function App() {
     engine.releaseChord(engine.getContext().currentTime + 0.8);
   }, []);
 
-  const getAnalyser = useCallback(() => engineRef.current?.getAnalyser() ?? null, []);
   const getAudioContext = useCallback(() => (engineRef.current?.getContext() as AudioContext | undefined) ?? null, []);
 
   const centerAreaProps: CenterAreaProps = {
@@ -956,13 +1096,14 @@ export function App() {
       onTrackClear: handleLooperTrackClear,
       onClearAll: handleLooperClearAll,
       onExport: (repeats: number) => void handleExportLoops(repeats),
+      onTrackMix: handleTrackMix,
+      onUndo: handleLooperUndo,
     },
     sequencerGridProps: {
       onToggleTransport: toggleTransport,
     },
     onChordTrigger: handleGameChordTrigger,
     onSampleCaptured: handleSampleCaptured,
-    getAnalyser,
     getAudioContext,
   };
 

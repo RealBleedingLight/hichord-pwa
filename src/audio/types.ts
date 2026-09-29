@@ -69,6 +69,7 @@ export interface LooperTrack {
   index: number;
   state: 'empty' | 'recording' | 'playing' | 'muted';
   gain: number;
+  pan?: number;
 }
 
 export interface Preset {

@@ -6,7 +6,7 @@ import { FMSynth } from './synth-fm';
 import { SampleSynth } from './synth-sample';
 import { NoiseSynth } from './synth-noise';
 import { EffectsChain } from './effects';
-import { INSTRUMENT_ROOT_MIDI, isBuiltinInstrument, renderInstrument } from './instruments';
+import { isBuiltinInstrument, renderInstrument, singleZone, type SampleSet } from './instruments';
 import { DEFAULT_SHAPING, type VoiceShaping } from './shaping';
 import { smoothSet } from './envelope';
 import { Vocoder } from './vocoder';
@@ -62,13 +62,12 @@ export class AudioEngine {
   private currentWaveform: AnalogWaveform = 'sawtooth';
   private currentSynthMode: SynthMode = 'analog';
   private currentFmPresetIndex = 0;
-  private currentSampleBuffer: AudioBuffer | null = null;
-  private currentSampleRootMidi = INSTRUMENT_ROOT_MIDI;
-  private instrumentCache = new Map<string, AudioBuffer>();
+  private currentSampleSet: SampleSet | null = null;
+  private instrumentCache = new Map<string, SampleSet>();
   private micSample: { buffer: AudioBuffer; rootMidi: number } | null = null;
 
-  constructor(offlineCtx?: OfflineAudioContext) {
-    this.ctx = offlineCtx ?? new (window.AudioContext || (window as any).webkitAudioContext)({ latencyHint: 'interactive' });
+  constructor(offlineCtx?: OfflineAudioContext, latencyHint: AudioContextLatencyCategory | number = 'interactive') {
+    this.ctx = offlineCtx ?? new (window.AudioContext || (window as any).webkitAudioContext)({ latencyHint });
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.value = 0.8;
     this.masterGain.connect(this.ctx.destination);
@@ -154,8 +153,8 @@ export class AudioEngine {
         synths.fm.trigger(allNotes, this.currentAdsr, FM_PRESETS[this.currentFmPresetIndex] ?? FM_PRESETS[0]!, when, spread);
         break;
       case 'sample':
-        if (this.currentSampleBuffer) {
-          synths.sample.trigger(allNotes, this.currentAdsr, this.currentSampleBuffer, when, this.currentSampleRootMidi, spread);
+        if (this.currentSampleSet) {
+          synths.sample.trigger(allNotes, this.currentAdsr, this.currentSampleSet, when, spread);
         }
         break;
       case 'noise':
@@ -229,24 +228,36 @@ export class AudioEngine {
   setWaveform(wf: AnalogWaveform): void { this.currentWaveform = wf; }
   setAdsr(adsr: ADSREnvelope): void { this.currentAdsr = adsr; }
   setFmPresetIndex(idx: number): void { this.currentFmPresetIndex = idx; }
-  setSampleBuffer(buffer: AudioBuffer | null, rootMidi = INSTRUMENT_ROOT_MIDI): void {
-    this.currentSampleBuffer = buffer;
-    this.currentSampleRootMidi = rootMidi;
+  /** True if a built-in instrument is already rendered (switching to it is instant). */
+  isInstrumentReady(name: string): boolean {
+    return name === 'mic' || this.instrumentCache.has(isBuiltinInstrument(name) ? name : 'piano');
   }
 
-  /** Selects a built-in instrument ('keys', 'pluck', …) or the captured mic sample ('mic'). */
+  /** Renders an instrument ahead of time without selecting it. */
+  prepareInstrument(name: string): void {
+    if (name === 'mic' || this.isInstrumentReady(name)) return;
+    const id = isBuiltinInstrument(name) ? name : 'piano';
+    this.instrumentCache.set(id, renderInstrument(this.ctx, id));
+  }
+
+  /** Plays a single recording, pitched from `rootMidi`. */
+  setSampleBuffer(buffer: AudioBuffer | null, rootMidi = 60): void {
+    this.currentSampleSet = buffer ? singleZone(buffer, rootMidi) : null;
+  }
+
+  /** Selects a built-in instrument ('piano', 'strings', …) or the captured mic sample ('mic'). */
   setSampleName(name: string): void {
     if (name === 'mic') {
       if (this.micSample) this.setSampleBuffer(this.micSample.buffer, this.micSample.rootMidi);
       return;
     }
-    const id = isBuiltinInstrument(name) ? name : 'keys';
-    let buffer = this.instrumentCache.get(id);
-    if (!buffer) {
-      buffer = renderInstrument(this.ctx, id);
-      this.instrumentCache.set(id, buffer);
+    const id = isBuiltinInstrument(name) ? name : 'piano';
+    let set = this.instrumentCache.get(id);
+    if (!set) {
+      set = renderInstrument(this.ctx, id);
+      this.instrumentCache.set(id, set);
     }
-    this.setSampleBuffer(buffer, INSTRUMENT_ROOT_MIDI);
+    this.currentSampleSet = set;
   }
 
   /** Stores a mic recording as the 'mic' instrument; `rootMidi` is its detected pitch. */
@@ -257,6 +268,7 @@ export class AudioEngine {
   hasMicSample(): boolean { return this.micSample !== null; }
 
   setBpm(bpm: number): void { this.effectsChain.setBpm(bpm); }
+  setReverbType(kind: 'room' | 'hall' | 'plate'): void { this.effectsChain.setReverbType(kind); }
 
   getSampleSynth(): SampleSynth { return this.group('live').sample; }
   getNoiseSynth(): NoiseSynth { return this.group('live').noise; }
@@ -308,6 +320,13 @@ export class AudioEngine {
   /** Metronome clicks go here: audible, but not recorded into loops. */
   getMonitorBus(): AudioNode { return this.limiter; }
   getAnalyser(): AnalyserNode { return this.analyser; }
+
+  /** Delay from scheduling a sound to it leaving the speaker, in ms (0 if unknown). */
+  getLatencyMs(): number {
+    const ctx = this.ctx as AudioContext & { outputLatency?: number };
+    if (!(ctx instanceof AudioContext)) return 0;
+    return Math.round(((ctx.baseLatency ?? 0) + (ctx.outputLatency ?? 0)) * 1000);
+  }
   setEffect(type: EffectType, enabled: boolean, value: number): void {
     switch (type) {
       case 'lfoVibrato':
